@@ -1,5 +1,17 @@
 #pragma once
 
+/*
+ * This is a concurrent B-tree implementation that uses Optimisitic Lock
+ * Coupling. It is taken from https://github.com/wangziqi2016/index-microbench.
+ *
+ * Lock-coupling is when you only lock at most two locks in the btree at a
+ * time. If you use "optmisitic locks", you get Optimistic Lock Coupling (OLC).
+ * The main goal of optimistic lock coupling is to minimize cache coherence
+ * contention between cores, thus achieving higher performance and scalability.
+ *
+ * See the `OptLock` type for more on optimistic locking.
+ */
+
 #include <cassert>
 #include <cstring>
 #include <atomic>
@@ -8,11 +20,32 @@
 
 namespace btreeolc {
 
+// Each page in the Btree can be either an inner node or a leaf node.
 enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
 
+// Use 4KB pages
 static const uint64_t pageSize=4*1024;
 
+// An optimistic lock implementation.
+//
+// An optimistic lock has two parts: a lock and a version counter. The lock is
+// acquired by all writers, as in a normal RW-locking scheme. However, a reader
+// only waits for the lock to be free and gets the version number. On a
+// WriteUnlock, we increment the version number. On a ReadUnlock, we check that
+// the version number has not changed since we acquired the lock. If it has, we
+// restart.
+//
+// Optimistic locking works best when conflicts are rare.
+//
+// This implementation comes more or less straight from the pseudo-code in
+// appendix A of this paper: https://db.in.tum.de/~leis/papers/artsync.pdf.
 struct OptLock {
+  // In this implementation, both the lock and the version counter are
+  // represented using this 64-bit word.
+  //
+  // Bit 0 represents that the locked value is obsolete (1 = obsolete).
+  // Bit 1 represents that the value is locked (1 = locked).
+  // Bits 2-63 represent the version counter.
   std::atomic<uint64_t> typeVersionLockObsolete{0b100};
 
   bool isLocked(uint64_t version) {
@@ -23,6 +56,7 @@ struct OptLock {
     uint64_t version;
     version = typeVersionLockObsolete.load();
     if (isLocked(version) || isObsolete(version)) {
+      // PAUSE compiler intrinsic. See https://software.intel.com/en-us/node/524249.
       _mm_pause();
       needRestart = true;
     }
@@ -461,4 +495,4 @@ struct BTree {
 
 };
 
-}
+} // btreeolc
