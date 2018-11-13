@@ -33,7 +33,10 @@ $(OUTDIR):
 	mkdir $@
 
 $(OUTDIR)/test_%: $(TESTDIR)/%.cc $(TESTCCS) $(BTREEHS) $(TESTHS)
-	$(CCX) $(CCXFLAGS) -o $@ $<
+	$(CCX) $(CCXFLAGS) -ggdb -o $@ $<
 
 $(OUTDIR)/bmk_%: $(BMKDIR)/%.cc $(BMKCCS) $(BTREEHS) $(BMKHS)
 	$(CCX) $(CCXFLAGS) -O3 -o $@ $<
+
+clean:
+	rm -rf $(OUTDIR)

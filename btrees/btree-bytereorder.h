@@ -345,7 +345,7 @@ private:
 
         // Pointer to last 16 bits of key.
         uint16_t *lsb = reinterpret_cast<uint16_t *>(
-                            reinterpret_cast<uint8_t *>(&k)[size-2]);
+                            &reinterpret_cast<uint8_t *>(&k)[size-2]);
         uint16_t *msb = reinterpret_cast<uint16_t *>(&k);
 
         // Swap them
