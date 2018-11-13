@@ -20,7 +20,7 @@
 #include <cassert>
 #include <cstring>
 
-namespace btreeolc {
+namespace btree_hybrid {
 // Each page in the Btree can be either an inner node or a leaf node.
 enum class PageType : uint8_t { BTreeInner = 1, BTreeLeaf = 2 };
 
@@ -331,7 +331,7 @@ struct BTreeInner : public BTreeInnerBase {
 
 // A generic, thread-safe btree using OLC.
 template <class Key, class Value>
-struct BTree : common::BTreeBase<Key, Value> {
+struct BTree : BTreeBase<Key, Value> {
     // The root node of the btree.
     std::atomic<NodeBase *> root;
 
@@ -579,4 +579,4 @@ struct BTree : common::BTreeBase<Key, Value> {
     }
 };
 
-}  // namespace btreeolc
+}  // namespace btree_hybrid

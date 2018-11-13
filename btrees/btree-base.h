@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+namespace common {
+
 /*
  * A base class for thread-safe btree maps.
  *
@@ -26,3 +28,5 @@ struct BTreeBase {
     // read.
     virtual uint64_t scan(Key k, int range, Value *output) = 0;
 };
+
+} // namespace common
