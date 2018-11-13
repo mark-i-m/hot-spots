@@ -36,4 +36,4 @@ $(OUTDIR)/test_%: $(TESTDIR)/%.cc $(TESTCCS) $(BTREEHS) $(TESTHS)
 	$(CCX) $(CCXFLAGS) -o $@ $<
 
 $(OUTDIR)/bmk_%: $(BMKDIR)/%.cc $(BMKCCS) $(BTREEHS) $(BMKHS)
-	$(CCX) $(CCXFLAGS) -o $@ $<
+	$(CCX) $(CCXFLAGS) -O3 -o $@ $<
