@@ -2,6 +2,8 @@
  * A test harness to check correctness of btree implementations.
  */
 
+#include "test-utils.h"
+
 #include "btree-base.h"
 #include "btreeolc.h"
 #include "btree-hybrid.h"
@@ -10,8 +12,6 @@
 #include <cassert>
 #include <iostream>
 #include <string.h>
-#include <vector>
-#include <cstdlib>
 
 // Btree implementations to test
 enum class BTreeType {
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     }
 
     // Parse command line arg
-    BTreeType type;
+    BTreeType type = BTreeType::BTreeOLC;
     if (strncmp("olc", argv[1], 4) == 0) {
         std::cout << "Testing OLC" << std::endl;
         type = BTreeType::BTreeOLC;
@@ -85,25 +85,17 @@ void test_simple_insert_read(common::BTreeBase<Key, Value> *btree) {
 }
 
 void test_insert_read(common::BTreeBase<Key, Value> *btree) {
-    constexpr int TEST_SIZE = 100000;
+    constexpr int TEST_SIZE = 1000000;
 
-    std::vector<std::pair<Key, Value>> pairs(TEST_SIZE);
-
-    // Generate a bunch of keys and values.
-    srand(0);
-
-    for (int i = 0; i < TEST_SIZE; ++i) {
-        Key k = rand();
-        Value v = rand();
-
-        pairs.push_back({k, v});
-
-        btree->insert(k, v);
+    const auto pairs = gen_data<Key, Value>(TEST_SIZE);
+    for (const auto pair : pairs) {
+        btree->insert(pair);
     }
 
     for (const auto pair : pairs) {
         Value v;
-        assert(btree->lookup(pair.first, v));
+        bool found = btree->lookup(pair.first, v);
+        assert(found);
         assert(v == pair.second);
     }
 }

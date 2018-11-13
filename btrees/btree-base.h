@@ -27,6 +27,12 @@ struct BTreeBase {
     // could scan.  The caller should keep calling `scan` until no records are
     // read.
     virtual uint64_t scan(Key k, int range, Value *output) = 0;
+
+    // For convenience: insert from pair.
+    template <class Pair>
+    void insert(Pair p) {
+        insert(p.first, p.second);
+    }
 };
 
 } // namespace common
