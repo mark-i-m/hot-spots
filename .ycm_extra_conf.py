@@ -8,8 +8,6 @@ flags = [
 '-std=c++11',
 '-x',
 'c++',
-'-isystem',
-'/usr/include',
 '-I', 'btrees',
 '-I', 'tests',
 '-I', 'benchmarks',
