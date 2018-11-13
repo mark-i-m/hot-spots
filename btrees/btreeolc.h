@@ -12,6 +12,8 @@
  * See the `OptLock` type for more on optimistic locking.
  */
 
+#include "btree-base.h"
+
 #include <immintrin.h>
 #include <sched.h>
 #include <atomic>
@@ -329,7 +331,7 @@ struct BTreeInner : public BTreeInnerBase {
 
 // A generic, thread-safe btree using OLC.
 template <class Key, class Value>
-struct BTree {
+struct BTree : BTreeBase<Key, Value> {
     // The root node of the btree.
     std::atomic<NodeBase *> root;
 
