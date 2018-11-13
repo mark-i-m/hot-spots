@@ -1,6 +1,6 @@
 
 CCX = g++
-CCXFLAGS = -std=c++11
+CCXFLAGS = -std=c++11 -pthread
 
 BTREEDIR = btrees
 TESTDIR = tests
