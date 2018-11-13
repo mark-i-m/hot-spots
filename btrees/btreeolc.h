@@ -327,12 +327,17 @@ struct BTreeInner : public BTreeInnerBase {
     }
 };
 
+// A generic, thread-safe btree using OLC.
 template <class Key, class Value>
 struct BTree {
+    // The root node of the btree.
     std::atomic<NodeBase *> root;
 
+    // Construct a new btree with exactly one node, which is an empty leaf node.
     BTree() { root = new BTreeLeaf<Key, Value>(); }
 
+    // Create a new root node with the two given nodes as children separated by
+    // the given key. Atomically replace the current root with the new one.
     void makeRoot(Key k, NodeBase *leftChild, NodeBase *rightChild) {
         auto inner = new BTreeInner<Key>();
         inner->count = 1;
@@ -342,6 +347,8 @@ struct BTree {
         root = inner;
     }
 
+    // Depending on the value of `count`, either yield the processor to the OS
+    // scheduler or inform the processor you are waiting for a spin lock.
     void yield(int count) {
         if (count > 3)
             sched_yield();
@@ -349,6 +356,7 @@ struct BTree {
             _mm_pause();
     }
 
+    // Insert the (k, v) pair into the tree.
     void insert(Key k, Value v) {
         int restartCount = 0;
     restart:
@@ -458,6 +466,9 @@ struct BTree {
         }
     }
 
+    // Lookup key `k` in the btree. If `k` is in the btree, set `result` to the
+    // value associated with `k` and return true. If `k` is not in the btree,
+    // return false.
     bool lookup(Key k, Value &result) {
         int restartCount = 0;
     restart:
@@ -508,6 +519,12 @@ struct BTree {
         return success;
     }
 
+    // Do a range query on the btree. Starting with the least key greater than
+    // or equal to `k`, scan at most `range` values into the buffer pointed to
+    // by `output`. Return the number of elements read. Note that we may read
+    // fewer than `range` elements even if there are more elements that we
+    // could scan.  The caller should keep calling `scan` until no records are
+    // read.
     uint64_t scan(Key k, int range, Value *output) {
         int restartCount = 0;
     restart:
