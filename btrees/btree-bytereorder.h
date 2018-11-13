@@ -332,11 +332,32 @@ struct BTreeInner : public BTreeInnerBase {
 // A generic, thread-safe btree using OLC.
 template <class Key, class Value>
 struct BTree : public common::BTreeBase<Key, Value> {
+private:
+    // Given a key `k`, return the byte-reordered version of `k`. This function
+    // assumes that we can safely reorder bytes in the key.
+    Key reorder(Key k) const {
+        // A page has 4KB, so even for an 1B key, we can have at most 4KB
+        // entries per page. Thus, to avoid hot pages, we can swap the first
+        // two and last two bytes (16 bits == 32K entries).
+
+        // How many bytes in the key?
+        size_t size = sizeof(k);
+
+        // Pointer to last 16 bits of key.
+        uint16_t *lsb = reinterpret_cast<uint16_t *>(
+                            reinterpret_cast<uint8_t *>(&k)[size-2]);
+        uint16_t *msb = reinterpret_cast<uint16_t *>(&k);
+
+        // Swap them
+        uint16_t tmp = *lsb;
+        *lsb = *msb;
+        *msb = tmp;
+
+        return k;
+    }
+
     // The root node of the btree.
     std::atomic<NodeBase *> root;
-
-    // Construct a new btree with exactly one node, which is an empty leaf node.
-    BTree() { root = new BTreeLeaf<Key, Value>(); }
 
     // Create a new root node with the two given nodes as children separated by
     // the given key. Atomically replace the current root with the new one.
@@ -358,8 +379,14 @@ struct BTree : public common::BTreeBase<Key, Value> {
             _mm_pause();
     }
 
+public:
+    // Construct a new btree with exactly one node, which is an empty leaf node.
+    BTree() { root = new BTreeLeaf<Key, Value>(); }
+
     // Insert the (k, v) pair into the tree.
-    void insert(Key k, Value v) {
+    void insert(Key key, Value v) {
+        Key k = reorder(key);
+
         int restartCount = 0;
     restart:
         if (restartCount++) yield(restartCount);
@@ -471,7 +498,9 @@ struct BTree : public common::BTreeBase<Key, Value> {
     // Lookup key `k` in the btree. If `k` is in the btree, set `result` to the
     // value associated with `k` and return true. If `k` is not in the btree,
     // return false.
-    bool lookup(Key k, Value &result) {
+    bool lookup(Key key, Value &result) {
+        Key k = reorder(key);
+
         int restartCount = 0;
     restart:
         if (restartCount++) yield(restartCount);
@@ -527,7 +556,12 @@ struct BTree : public common::BTreeBase<Key, Value> {
     // fewer than `range` elements even if there are more elements that we
     // could scan.  The caller should keep calling `scan` until no records are
     // read.
-    uint64_t scan(Key k, int range, Value *output) {
+    //
+    // NOTE: for the byte-reordering implementation, this returns keys in no
+    // particular order and starting from an arbitrary point in the tree.
+    uint64_t scan(Key key, int range, Value *output) {
+        Key k = reorder(key);
+
         int restartCount = 0;
     restart:
         if (restartCount++) yield(restartCount);
