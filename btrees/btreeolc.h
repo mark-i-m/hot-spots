@@ -141,26 +141,39 @@ struct BTreeLeafBase : public NodeBase {
     static const PageType typeMarker = PageType::BTreeLeaf;
 };
 
+// A single leaf node in the btree. Note that anyone doing operations on these
+// nodes should already be holding a lock.
 template <class Key, class Payload>
 struct BTreeLeaf : public BTreeLeafBase {
+    // Represents a key and value associated with that key.
     struct Entry {
         Key k;
         Payload p;
     };
 
+    // The max number of entries in a leaf node (based on the size of keys
+    // and pages). We also need to account for the space of the locks.
     static const uint64_t maxEntries =
         (pageSize - sizeof(NodeBase)) / (sizeof(Key) + sizeof(Payload));
 
+    // The keys for each child.
     Key keys[maxEntries];
+
+    // The (key, value) pairs inserted into the tree.
     Payload payloads[maxEntries];
 
+    // Construct an empty leaf node.
     BTreeLeaf() {
         count = 0;
         type = typeMarker;
     }
 
+    // Returns true if this leaf is full. It needs to be split before we can
+    // take any more entries.
     bool isFull() { return count == maxEntries; };
 
+    // Returns the index into this node of the least key that is greater than
+    // or equal to `k`.
     unsigned lowerBound(Key k) {
         unsigned lower = 0;
         unsigned upper = count;
@@ -177,6 +190,7 @@ struct BTreeLeaf : public BTreeLeafBase {
         return lower;
     }
 
+    // Alternate implementation of `lowerBound`. This function is not used anywhere.
     unsigned lowerBoundBF(Key k) {
         auto base = keys;
         unsigned n = count;
@@ -188,6 +202,8 @@ struct BTreeLeaf : public BTreeLeafBase {
         return (*base < k) + base - keys;
     }
 
+    // Insert the new (key, value) pair into this leaf. The caller should make
+    // sure that the node has space and split it if necessary.
     void insert(Key k, Payload p) {
         assert(count < maxEntries);
         if (count) {
@@ -209,6 +225,8 @@ struct BTreeLeaf : public BTreeLeafBase {
         count++;
     }
 
+    // Split this leaf node in half, and return the new leaf node. The new node
+    // comes _after_ this node.
     BTreeLeaf *split(Key &sep) {
         BTreeLeaf *newLeaf = new BTreeLeaf();
         newLeaf->count = count - (count / 2);
@@ -226,31 +244,32 @@ struct BTreeInnerBase : public NodeBase {
     static const PageType typeMarker = PageType::BTreeInner;
 };
 
+// A single inner node in the btree. Note that anyone doing operations on these
+// nodes should already be holding a lock.
 template <class Key>
 struct BTreeInner : public BTreeInnerBase {
+    // The max number of entries in an inner node (based on the size of keys
+    // and pages). We also need to account for the space of the locks.
     static const uint64_t maxEntries =
         (pageSize - sizeof(NodeBase)) / (sizeof(Key) + sizeof(NodeBase *));
+
+    // Pointers to the child nodes.
     NodeBase *children[maxEntries];
+
+    // The keys for each child.
     Key keys[maxEntries];
 
+    // Construct an empty inner node.
     BTreeInner() {
         count = 0;
         type = typeMarker;
     }
 
+    // Returns true if adding one more key would fill the node.
     bool isFull() { return count == (maxEntries - 1); };
 
-    unsigned lowerBoundBF(Key k) {
-        auto base = keys;
-        unsigned n = count;
-        while (n > 1) {
-            const unsigned half = n / 2;
-            base = (base[half] < k) ? (base + half) : base;
-            n -= half;
-        }
-        return (*base < k) + base - keys;
-    }
-
+    // Returns the index into this node of the least key that is greater than
+    // or equal to `k`.
     unsigned lowerBound(Key k) {
         unsigned lower = 0;
         unsigned upper = count;
@@ -267,6 +286,20 @@ struct BTreeInner : public BTreeInnerBase {
         return lower;
     }
 
+    // Alternate implementation of `lowerBound`. This function is not used anywhere.
+    unsigned lowerBoundBF(Key k) {
+        auto base = keys;
+        unsigned n = count;
+        while (n > 1) {
+            const unsigned half = n / 2;
+            base = (base[half] < k) ? (base + half) : base;
+            n -= half;
+        }
+        return (*base < k) + base - keys;
+    }
+
+    // Split this inner node in half, and return the new inner node. The new
+    // node comes _after_ this node.
     BTreeInner *split(Key &sep) {
         BTreeInner *newInner = new BTreeInner();
         newInner->count = count - (count / 2);
@@ -279,6 +312,8 @@ struct BTreeInner : public BTreeInnerBase {
         return newInner;
     }
 
+    // Insert the new child with the given key into this inner node. The caller
+    // should make sure that the node has space and split it if necessary.
     void insert(Key k, NodeBase *child) {
         assert(count < maxEntries - 1);
         unsigned pos = lowerBound(k);
