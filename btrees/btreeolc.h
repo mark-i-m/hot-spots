@@ -52,6 +52,8 @@ namespace btreeolc {
             return ((version & 0b10) == 0b10);
         }
 
+        // Grab an optimistic read lock.
+        //
         // If the current version is locked, set `needRestart` to true and return the
         // current version. The reader should restart if `needRestart` is set to true
         // after calling this method.
@@ -66,6 +68,11 @@ namespace btreeolc {
             return version;
         }
 
+        // Grab the write lock.
+        //
+        // This is done by first grabbing the optimistic read lock, and then
+        // attempting to upgrade it to a write lock. If this attempt fails,
+        // `needRestart` is set to true, and the caller needs to restart.
         void writeLockOrRestart(bool &needRestart) {
             uint64_t version;
             version = readLockOrRestart(needRestart);
@@ -75,6 +82,12 @@ namespace btreeolc {
             if (needRestart) return;
         }
 
+        // Upgrade the given read lock to a write lock.
+        //
+        // `version` should be the version at the time a read lock was acquired.
+        //
+        // If the version has changed since the read lock was acquired,
+        // `needRestart` is set to true, and the caller needs to restart.
         void upgradeToWriteLockOrRestart(uint64_t &version, bool &needRestart) {
             if (typeVersionLockObsolete.compare_exchange_strong(version, version + 0b10)) {
                 version = version + 0b10;
@@ -84,32 +97,52 @@ namespace btreeolc {
             }
         }
 
+        // Release the write lock.
+        //
+        // This should only be called if you successfully acquired the write
+        // lock. This method releases the lock and increments the version.
         void writeUnlock() {
             typeVersionLockObsolete.fetch_add(0b10);
         }
 
+        // Return the obsolete bit of the given version.
         bool isObsolete(uint64_t version) {
             return (version & 1) == 1;
         }
 
+        // The same as `readUnlockOrRestart`.
         void checkOrRestart(uint64_t startRead, bool &needRestart) const {
             readUnlockOrRestart(startRead, needRestart);
         }
 
+        // Release the read lock.
+        //
+        // `startRead` is the version at the time the read lock was acquired.
+        //
+        // If the version has changed since the read lock was acquired,
+        // `needRestart` is set to true, and the caller should restart.
         void readUnlockOrRestart(uint64_t startRead, bool &needRestart) const {
             needRestart = (startRead != typeVersionLockObsolete.load());
         }
 
+        // Release the write lock _and_ set the obsolete bit.
+        //
+        // This is like `writeUnlock` except that it also sets the obsolete bit.
         void writeUnlockObsolete() {
             typeVersionLockObsolete.fetch_add(0b11);
         }
     };
 
+    // A base type for all btree nodes. Each node hasi an optimisitc lock.
     struct NodeBase : public OptLock{
+        // Leaf or inner?
         PageType type;
+
+        // The number of entries in this btree node.
         uint16_t count;
     };
 
+    // Leaf superclass so that we don't have to keep defining the type.
     struct BTreeLeafBase : public NodeBase {
         static const PageType typeMarker=PageType::BTreeLeaf;
     };
@@ -191,6 +224,7 @@ namespace btreeolc {
             }
         };
 
+    // Inner node superclass so that we don't have to keep defining the type.
     struct BTreeInnerBase : public NodeBase {
         static const PageType typeMarker=PageType::BTreeInner;
     };
@@ -285,7 +319,7 @@ namespace btreeolc {
 
             void insert(Key k, Value v) {
                 int restartCount = 0;
-restart:
+              restart:
                 if (restartCount++)
                     yield(restartCount);
                 bool needRestart = false;
@@ -395,7 +429,7 @@ restart:
 
             bool lookup(Key k, Value& result) {
                 int restartCount = 0;
-restart:
+              restart:
                 if (restartCount++)
                     yield(restartCount);
                 bool needRestart = false;
@@ -445,7 +479,7 @@ restart:
 
             uint64_t scan(Key k, int range, Value* output) {
                 int restartCount = 0;
-restart:
+              restart:
                 if (restartCount++)
                     yield(restartCount);
                 bool needRestart = false;
