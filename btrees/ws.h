@@ -48,6 +48,9 @@ public:
 
     // Returns true iff the given page is in the WS.
     bool is_hot(const Page& p);
+
+    // Clears all stats.
+    void clear();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -80,6 +83,11 @@ MaybePage<Page> WS<Page>::touch(const Page p) {
 template <typename Page>
 bool WS<Page>::is_hot(const Page& p) {
     return stats.count(p) > 0;
+}
+
+template <typename Page>
+void WS<Page>::clear() {
+    stats.clear();
 }
 
 } // namespace ws
