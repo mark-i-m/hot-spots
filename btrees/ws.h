@@ -7,23 +7,31 @@
 
 namespace ws {
 
-// Tracks stats for pages that have been touched and chooses pages to evict.
-template <typename Page>
+// Tracks stats for ranges of pages that have been touched and chooses ranges
+// to evict.
+template <typename K>
 class WS {
-    size_t k;
-    std::unordered_map<Page, uint64_t> stats;
+    size_t n;
+    util::RangeMap<K, uint64_t> stats;
 
 public:
-    // Construct a WS with at most `k` pages.
-    WS(size_t k);
+    // Construct a WS with at most `n` pages.
+    WS(size_t n);
 
-    // Update stats by registering a touch for page `p`. If a page should be
-    // evicted, returns that page in a `MaybePage`. Otherwise, returns an empty
-    // `MaybePage`.
-    util::Maybe<Page> touch(const Page p);
+    // Update stats by registering a touch for key `k`. If a range should be
+    // evicted, returns that range in a `Maybe`.
+    //
+    // Note that the _CALLER_ should verify that `k` is in a range that is
+    // _already_ in the WS. If it is not, use the other `touch`.
+    util::Maybe<std::pair<K, K>> touch(const K k);
 
-    // Returns true iff the given page is in the WS.
-    bool is_hot(const Page& p);
+    // Update stats by registering a touch for key `k` in range `[kl, kh)`
+    // which may not already be in the WS. If a range should be evicted,
+    // returns that range in a `Maybe`.
+    util::Maybe<std::pair<K, K>> touch(const K k, const K kl, const K kh);
+
+    // Returns true iff the given key k is in a range in the WS.
+    bool is_hot(const K& k);
 
     // Clears all stats.
     void clear();
@@ -33,36 +41,50 @@ public:
 // Implementations
 ////////////////////////////////////////////////////////////////////////////////
 
-template <typename Page>
-WS<Page>::WS(size_t k) : k(k) {}
+template <typename K>
+WS<K>::WS(size_t n) : n(n) {}
 
-// TODO: need to actually do some sort of least used...
-template <typename Page>
-util::Maybe<Page> WS<Page>::touch(const Page p) {
-    if (stats.count(p) == 0) {
-        stats.insert(std::move(p), 0);
-    } else {
-        stats.find(p).second += 1;
-    }
+template <typename K>
+util::Maybe<std::pair<K, K>> WS<K>::touch(const K k) {
+    auto maybe = stats.lookup(k);
+    assert(maybe.is_value());
+    maybe.get_value() += 1;
 
-    // Return something for the sake of testing
-    if (stats.size() > k) {
-        auto it = stats.begin();
-        Page p = *it;
-        stats.erase(it);
-        return util::Maybe<Page>(p);
-    }
-
-    return util::Maybe<Page>();
+    return util::Maybe<std::pair<K, K>>();
 }
 
-template <typename Page>
-bool WS<Page>::is_hot(const Page& p) {
-    return stats.count(p) > 0;
+template <typename K>
+util::Maybe<std::pair<K, K>> WS<K>::touch(const K k, const K kl, const K kh) {
+    auto maybe = stats.lookup(k);
+
+    // If the key is not even in the map, insert it.
+    if (!maybe.is_value()) {
+        stats.insert_range(kl, kh);
+        stats.insert_key(k);
+
+        // Do we need to evict something?
+        if (stats.size() > n) {
+            // TODO: choose something... probably LRU
+            return util::Maybe<std::pair<K, K>>();
+        }
+    }
+
+    // Otherwise, update the stats.
+    else {
+        maybe.get_value() += 1;
+    }
+
+    // Nothing to evict
+    return util::Maybe<std::pair<K, K>>();
 }
 
-template <typename Page>
-void WS<Page>::clear() {
+template <typename K>
+bool WS<K>::is_hot(const K& k) {
+    return stats.lookup(k).is_value();
+}
+
+template <typename K>
+void WS<K>::clear() {
     stats.clear();
 }
 

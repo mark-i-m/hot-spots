@@ -60,6 +60,11 @@ public:
 
     // Clear all entries in the map.
     void clear();
+
+    // Returns the number of ranges in the map.
+    size_t size() const {
+        return ranges.size();
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
