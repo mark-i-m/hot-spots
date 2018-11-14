@@ -1,35 +1,11 @@
 #pragma once
 
+#include "util.h"
+
 #include <cstdlib>
 #include <unordered_map>
 
 namespace ws {
-
-// Is either a page or nothing.
-template <typename Page>
-class MaybePage {
-    bool _is_page;
-    const Page p;
-
-public:
-    // Construct a `MaybePage` that contains no page.
-    MaybePage() : _is_page(false) {}
-
-    // Construct a `MaybePage` that contains page `p`.
-    MaybePage(Page p) : _is_page(true), p(p) {}
-
-    // Returns true iff this `MaybePage` contains a page.
-    bool is_page() const {
-        return _is_page;
-    }
-
-    // Returns the page in this `MaybePage`. You should call `is_page` first to
-    // check that there is a page. It is undefined behavior to call this
-    // method if there is no page.
-    const Page get_page() const {
-        return p;
-    }
-};
 
 // Tracks stats for pages that have been touched and chooses pages to evict.
 template <typename Page>
@@ -44,7 +20,7 @@ public:
     // Update stats by registering a touch for page `p`. If a page should be
     // evicted, returns that page in a `MaybePage`. Otherwise, returns an empty
     // `MaybePage`.
-    MaybePage<Page> touch(const Page p);
+    util::Maybe<Page> touch(const Page p);
 
     // Returns true iff the given page is in the WS.
     bool is_hot(const Page& p);
@@ -62,7 +38,7 @@ WS<Page>::WS(size_t k) : k(k) {}
 
 // TODO: need to actually do some sort of least used...
 template <typename Page>
-MaybePage<Page> WS<Page>::touch(const Page p) {
+util::Maybe<Page> WS<Page>::touch(const Page p) {
     if (stats.count(p) == 0) {
         stats.insert(std::move(p), 0);
     } else {
@@ -74,10 +50,10 @@ MaybePage<Page> WS<Page>::touch(const Page p) {
         auto it = stats.begin();
         Page p = *it;
         stats.erase(it);
-        return MaybePage<Page>(p);
+        return util::Maybe<Page>(p);
     }
 
-    return MaybePage<Page>();
+    return util::Maybe<Page>();
 }
 
 template <typename Page>

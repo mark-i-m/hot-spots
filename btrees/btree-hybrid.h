@@ -13,6 +13,8 @@
  */
 
 #include "btree-base.h"
+#include "ws.h"
+#include "util.h"
 
 #include <immintrin.h>
 #include <sched.h>
