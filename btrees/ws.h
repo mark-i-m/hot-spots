@@ -24,12 +24,12 @@ public:
     //
     // Note that the _CALLER_ should verify that `k` is in a range that is
     // _already_ in the WS. If it is not, use the other `touch`.
-    util::Maybe<std::pair<K, K>> touch(const K k);
+    util::maybe::Maybe<std::pair<K, K>> touch(const K k);
 
     // Update stats by registering a touch for key `k` in range `[kl, kh)`
     // which may not already be in the WS. If a range should be evicted,
     // returns that range in a `Maybe`.
-    util::Maybe<std::pair<K, K>> touch(const K k, const K kl, const K kh);
+    util::maybe::Maybe<std::pair<K, K>> touch(const K k, const K kl, const K kh);
 
     // Returns true iff the given key k is in a range in the WS.
     bool is_hot(const K& k);
@@ -46,16 +46,16 @@ template <typename K>
 WS<K>::WS(size_t n) : n(n) {}
 
 template <typename K>
-util::Maybe<std::pair<K, K>> WS<K>::touch(const K k) {
+util::maybe::Maybe<std::pair<K, K>> WS<K>::touch(const K k) {
     auto maybe = stats.lookup(k);
     assert(maybe.is_value());
     maybe.get_value() += 1;
 
-    return util::Maybe<std::pair<K, K>>();
+    return util::maybe::Maybe<std::pair<K, K>>();
 }
 
 template <typename K>
-util::Maybe<std::pair<K, K>> WS<K>::touch(const K k, const K kl, const K kh) {
+util::maybe::Maybe<std::pair<K, K>> WS<K>::touch(const K k, const K kl, const K kh) {
     auto maybe = stats.lookup(k);
 
     // If the key is not even in the map, insert it.
@@ -66,7 +66,7 @@ util::Maybe<std::pair<K, K>> WS<K>::touch(const K k, const K kl, const K kh) {
         // Do we need to evict something?
         if (stats.size() > n) {
             // TODO: choose something... probably LRU
-            return util::Maybe<std::pair<K, K>>();
+            return util::maybe::Maybe<std::pair<K, K>>();
         }
     }
 
@@ -75,8 +75,8 @@ util::Maybe<std::pair<K, K>> WS<K>::touch(const K k, const K kl, const K kh) {
         maybe.get_value() += 1;
     }
 
-    // Nothing to evict
-    return util::Maybe<std::pair<K, K>>();
+    // Maybe to evict
+    return util::maybe::Maybe<std::pair<K, K>>();
 }
 
 template <typename K>

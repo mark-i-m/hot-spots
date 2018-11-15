@@ -4,6 +4,7 @@
 #include <iostream>
 
 void test_maybe();
+void test_range_map_simple();
 
 int main() {
     test_maybe();
@@ -16,17 +17,39 @@ void test_maybe() {
 
     uint64_t x = 1234;
 
-    util::Maybe<uint64_t> m1;
-    util::Maybe<uint64_t> m2(3456);
-    util::Maybe<uint64_t&> m3(x);
+    util::maybe::Maybe<uint64_t> m1;
+    util::maybe::Maybe<uint64_t> m2(3456);
+    util::maybe::Maybe<uint64_t*> m3(&x);
 
-    assert(!m1.is_value());
+    assert(!m1);
 
-    assert(m2.is_value());
-    assert(m2.get_value() == 3456);
+    assert(m2);
+    assert(*m2 == 3456);
 
-    assert(m3.is_value());
-    assert(m3.get_value() == x);
-    m3.get_value() = 0xAFAFAFA;
+    assert(m3);
+    assert(**m3 == x);
+    **m3 = 0xAFAFAFA;
     assert(x == 0xAFAFAFA);
+}
+
+void test_range_map_simple() {
+    std::cout << "test_range_map_simple" << std::endl;
+
+    util::RangeMap<uint64_t, uint64_t> rm;
+
+    assert(!rm.lookup(0xDEADBEEF));
+    assert(rm.size() == 0);
+
+    rm.insert_range(0, 10);
+
+    assert(!rm.lookup(0xDEADBEEF));
+    assert(!rm.lookup(0));
+    assert(rm.size() == 1);
+
+    rm.insert_key(3, 4);
+
+    assert(!rm.lookup(0xDEADBEEF));
+    assert(!rm.lookup(0));
+    assert(rm.lookup(3));
+    assert(rm.size() == 1);
 }
