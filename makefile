@@ -7,8 +7,9 @@ TESTDIR = tests
 BMKDIR = benchmarks
 OUTDIR = build
 
-TESTMAINS = test_btree test_util
 BMKMAINS = bmk1
+BTREETESTMAINS = test_btree
+OTHERTESTMAINS = test_util
 
 BTREEHS = $(wildcard $(BTREEDIR)/*.h)
 TESTHS = $(wildcard $(TESTSDIR)/*.h)
@@ -16,6 +17,7 @@ TESTCCS = $(wildcard $(TESTSDIR)/*.cc)
 BMKHS = $(wildcard $(BMKDIR)/*.h)
 BMKCCS = $(wildcard $(BMKDIR)/*.cc)
 
+TESTMAINS = $(BTREETESTMAINS) $(OTHERTESTMAINS)
 TESTMAINSTARGETS = $(patsubst %, $(OUTDIR)/test_%, $(TESTMAINS))
 BMKMAINSTARGETS = $(patsubst %, $(OUTDIR)/bmk_%, $(BMKMAINS))
 
@@ -44,12 +46,24 @@ clean:
 #####
 # Some convenience targets for running benchmark and tests
 
-TESTRUNTARGETS = $(patsubst %, %.tst, $(TESTMAINS))
+BTREETESTRUNTARGETS = $(patsubst %, %.tstolc, $(BTREETESTMAINS)) \
+					  $(patsubst %, %.tsthybrid, $(BTREETESTMAINS)) \
+					  $(patsubst %, %.tstbr, $(BTREETESTMAINS))
+OTHERTESTRUNTARGETS = $(patsubst %, %.tst, $(OTHERTESTMAINS))
 BMKRUNTARGETS = $(patsubst %, %.bmk, $(BMKMAINS))
 
-tst.all: $(TESTRUNTARGETS)
+tst.all: $(BTREETESTRUNTARGETS) $(OTHERTESTRUNTARGETS)
 
 bmk.all: $(BMKRUNTARGETS)
+
+%.tstolc: $(OUTDIR)/test_%
+	$< olc
+
+%.tsthybrid: $(OUTDIR)/test_%
+	$< hybrid
+
+%.tstbr: $(OUTDIR)/test_%
+	$< br
 
 %.tst: $(OUTDIR)/test_%
 	$<

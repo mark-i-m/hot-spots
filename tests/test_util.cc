@@ -8,6 +8,7 @@ void test_range_map_simple();
 
 int main() {
     test_maybe();
+    test_range_map_simple();
 
     std::cout << "SUCCESS :)" << std::endl;
 }
