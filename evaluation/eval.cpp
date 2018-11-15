@@ -6,11 +6,14 @@
 // input bulk_load_limit, R, W. N
 
 // to dos :
-// include btree file in this to access that code
-// connect with  btree : create an object of btree. use bulk insert, insert and read functions of btree
+//
 // measure times after every x operations and at the end for each thread
 // store times in an array
 // right now this is just one number - we have to make this into a pair of key value
+
+// Features to add in later :
+// think time
+// bulk_insert
 
 #include<iostream>
 #include<atomic>
@@ -41,7 +44,7 @@ int get_counter ()
 {
     return ++counter;
 }
-void reader_child (int thread_id, int ops)
+void reader_child (int thread_id, int ops, common::BTreeBase<uint64_t, uint64_t> *btree)
 {
     tready[thread_id] = true;
     //wait till all threads have spawned
@@ -62,7 +65,8 @@ void reader_child (int thread_id, int ops)
         read.first = read_value;
         read.second = 0;
         cout<<"Thread "<<thread_id <<" reading Key "<<read_value<<endl;
-
+        btree->lookup(read.first, read.second);
+        cout<<"Value read is "<<read.second<<endl;
         //
         // to do call read function to read value
         //
@@ -71,7 +75,7 @@ void reader_child (int thread_id, int ops)
     return;
 }
 
-void writer_child(int thread_id, int ops)
+void writer_child(int thread_id, int ops, common::BTreeBase<uint64_t, uint64_t> *btree)
 {
     tready[thread_id] = true;
     //wait till all threads have spawned
@@ -82,8 +86,12 @@ void writer_child(int thread_id, int ops)
     {
         //generate a value for sequential write
         //write_value must be greater than counter
+        std::pair<uint64_t, uint64_t> write;
         write_value = get_counter();
-        cout<<"Thread "<<thread_id <<" writing "<<write_value<<endl;
+        write.first = write_value;
+        write.second = rand();
+        cout<<"Thread "<<thread_id <<" writing "<<write.first<<" "<<write.second<<endl;
+        btree->insert(write);
         ops--;
     }
 
@@ -103,7 +111,7 @@ bool check_all_true (vector<bool> &arr)
     return true;
 }
 
-void test (int R, int W, int N)
+void test (int R, int W, int N, common::BTreeBase<uint64_t, uint64_t> *btree)
 {
     // ready variables to start the threads at the same time
 
@@ -113,7 +121,7 @@ void test (int R, int W, int N)
     {
         std::thread readers [R];
         for (int i=0; i<R; i++)
-            readers[i] = std::thread(reader_child, i, N);
+            readers[i] = std::thread(reader_child, i, N, btree);
         while (!check_all_true(tready)) {}
         ready = true;
 
@@ -124,7 +132,7 @@ void test (int R, int W, int N)
     {
         std::thread writers [W];
         for (int i=0; i<W; i++)
-            writers[i] = std::thread(writer_child, i, N);
+            writers[i] = std::thread(writer_child, i, N, btree);
         while (!check_all_true(tready)) {}
         ready = true;
         for (int i=0; i<W; i++)
@@ -134,11 +142,11 @@ void test (int R, int W, int N)
     {
         std::thread readers [R];
         for (int i=0; i<R; i++)
-            readers[i] = std::thread(reader_child, i, N);
+            readers[i] = std::thread(reader_child, i, N, btree);
 
         std::thread writers [W];
         for (int i=0; i<W; i++)
-            writers[i] = std::thread(writer_child, i+R, N);
+            writers[i] = std::thread(writer_child, i+R, N, btree);
         cout<<"Checking if ready"<<ready<<endl;
         while (!check_all_true(tready)) {cout<<"Wait"<<endl;}
         cout<<"Now ready to go"<<endl;
@@ -151,6 +159,7 @@ void test (int R, int W, int N)
     }
     return;
 }
+
 
 int main()
 {
@@ -187,19 +196,30 @@ int main()
     // to do
     //
     // Construct the btree implementation we want to test.
-    typedef uint64_t Key;
-    typedef uint64_t Value;
+
+    using Key = uint64_t;
+    using Value = uint64_t;
     auto new_btree_fn = [type]() -> common::BTreeBase<Key, Value> * {
-      switch (type) {
-          case BTreeType::BTreeOLC:
-            return new btreeolc::BTree<Key, Value>();
-          case BTreeType::BTreeHybrid:
-            return new btree_hybrid::BTree<Key, Value>();
-          case BTreeType::BTreeByteReorder:
-            return new btree_bytereorder::BTree<Key, Value>();
+        switch (type) {
+            case BTreeType::BTreeOLC:
+                return new btreeolc::BTree<Key, Value>();
+            case BTreeType::BTreeHybrid:
+                return new btree_hybrid::BTree<Key, Value>();
+            case BTreeType::BTreeByteReorder:
+                return new btree_bytereorder::BTree<Key, Value>();
         }
     };
-
+    
+    common::BTreeBase<Key, Value> *btree  = new_btree_fn();
+    int insert = 1;
+    srand ( time(NULL) );
+    while (insert<=bulk_load_limit)
+    {
+        int value = rand();
+        btree->insert(std::pair<uint64_t, uint64_t> (insert, value));
+        cout<<"Key : "<<insert<<" Value : "<<value<<endl;
+        insert++;
+    }
     // R is no. of reader threads, W is number of writer threads, N is number of operations each thread is supposed to do
     int R, W, N;
     cin>>R>>W>>N;
@@ -211,6 +231,6 @@ int main()
     counter.store(bulk_load_limit,std::memory_order_relaxed);
     cout<<"Initial counter is "<<counter<<endl;
     // to do timing???
-    test (R, W, N);
+    test (R, W, N, btree);
     return 0;
 }
