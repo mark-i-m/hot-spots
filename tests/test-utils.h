@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _TESTS_TEST_UTILS_H_
+#define _TESTS_TEST_UTILS_H_
 
 #include <cstdlib>
 #include <vector>
@@ -32,3 +33,5 @@ std::vector<std::pair<Key, Value>> gen_data(const size_t n) {
 
     return pairs;
 }
+
+#endif

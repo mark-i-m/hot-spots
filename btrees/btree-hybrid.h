@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _BTREE_HYBRID_H_
+#define _BTREE_HYBRID_H_
 
 /*
  * This is a concurrent B-tree implementation that uses Optimisitic Lock
@@ -582,3 +583,5 @@ struct BTree : public common::BTreeBase<Key, Value> {
 };
 
 }  // namespace btree_hybrid
+
+#endif

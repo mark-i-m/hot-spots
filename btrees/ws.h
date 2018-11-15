@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _BTREE_WS_H_
+#define _BTREE_WS_H_
 
 #include "util.h"
 
@@ -89,3 +90,5 @@ void WS<K>::clear() {
 }
 
 } // namespace ws
+
+#endif

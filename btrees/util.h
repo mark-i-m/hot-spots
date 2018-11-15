@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _BTREE_UTIL_H_
+#define _BTREE_UTIL_H_
 
 #include <map>
 #include <unordered_map>
@@ -10,17 +11,14 @@ namespace util {
 template <typename T>
 class Maybe {
     bool _is_val;
-    T* v;
+    T v;
 
 public:
     // Construct a `Maybe` that contains nothing.
     Maybe() : _is_val(false) {}
 
     // Construct a `Maybe` that contains value `v`.
-    Maybe(T& v) : _is_val(true), v(&v) {}
-
-    // Construct a `Maybe` that contains value `v`.
-    Maybe(T&& v) : _is_val(true), v(&v) {}
+    Maybe(T v) : _is_val(true), v(v) {}
 
     // Returns true iff this `Maybe` contains a value.
     bool is_value() const {
@@ -29,9 +27,9 @@ public:
 
     // Returns the value in this `Maybe`. You should call `is_value` first to
     // check that there is a value.
-    T& get_value() const {
+    T& get_value() {
         assert(_is_val);
-        return *v;
+        return v;
     }
 };
 
@@ -127,3 +125,5 @@ void RangeMap<K, T>::clear() {
 }
 
 } // namespace util
+
+#endif

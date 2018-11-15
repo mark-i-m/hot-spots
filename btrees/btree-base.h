@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _BTREE_BTREE_BASE_H
+#define _BTREE_BTREE_BASE_H
 
 #include <stdint.h>
 
@@ -36,3 +37,5 @@ struct BTreeBase {
 };
 
 } // namespace common
+
+#endif

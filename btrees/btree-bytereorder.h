@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _BTREE_BTREE_BYTEREORDER_H
+#define _BTREE_BTREE_BYTEREORDER_H
 
 /*
  * This is a concurrent B-tree implementation that uses Optimisitic Lock
@@ -614,3 +615,5 @@ public:
 };
 
 }  // namespace btree_bytereorder
+
+#endif
