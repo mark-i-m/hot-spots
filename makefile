@@ -47,8 +47,6 @@ clean:
 TESTRUNTARGETS = $(patsubst %, %.tst, $(TESTMAINS))
 BMKRUNTARGETS = $(patsubst %, %.bmk, $(BMKMAINS))
 
-#.PHONY: tst.all bmk.all $(TESTRUNTARGETS) $(BMKRUNTARGETS)
-
 tst.all: $(TESTRUNTARGETS)
 
 bmk.all: $(BMKRUNTARGETS)
