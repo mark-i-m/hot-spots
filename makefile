@@ -7,7 +7,7 @@ TESTDIR = tests
 BMKDIR = benchmarks
 OUTDIR = build
 
-TESTMAINS = test1
+TESTMAINS = test_btree test_util
 BMKMAINS = bmk1
 
 BTREEHS = $(wildcard $(BTREEDIR)/*.h)

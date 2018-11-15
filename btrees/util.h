@@ -2,6 +2,7 @@
 
 #include <map>
 #include <unordered_map>
+#include <cassert>
 
 namespace util {
 
@@ -18,15 +19,18 @@ public:
     // Construct a `Maybe` that contains value `v`.
     Maybe(T& v) : _is_val(true), v(&v) {}
 
+    // Construct a `Maybe` that contains value `v`.
+    Maybe(T&& v) : _is_val(true), v(&v) {}
+
     // Returns true iff this `Maybe` contains a value.
     bool is_value() const {
         return _is_val;
     }
 
     // Returns the value in this `Maybe`. You should call `is_value` first to
-    // check that there is a value. It is undefined behavior to call this
-    // method if there is no value.
+    // check that there is a value.
     T& get_value() const {
+        assert(_is_val);
         return *v;
     }
 };
