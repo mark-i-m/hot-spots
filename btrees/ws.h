@@ -1,11 +1,15 @@
 #ifndef _BTREE_WS_H_
 #define _BTREE_WS_H_
 
+// TODO : Implement the LRU alternately by keeping an atomic counter. On a
+// touch, this value will be stored with the range in the RangeMap
+
 #include "util.h"
 
 #include <iostream>
 #include <cstdlib>
 #include <unordered_map>
+#include <pthread.h>
 
 namespace btree_hybrid {
 
