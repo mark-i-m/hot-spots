@@ -56,4 +56,16 @@ void test_range_map_simple() {
     assert(rm.find(34));
     assert(**rm.find(34) == 5);
     assert(rm.size() == 2);
+
+    // Remove
+    uint64_t v = rm.remove(0, 10);
+    assert(v == 20);
+    assert(!rm.find(20));
+    assert(rm.size() == 1);
+
+    uint64_t v2 = rm.remove(30, 40);
+    assert(v2 == 5);
+    assert(!rm.find(20));
+    assert(!rm.find(30));
+    assert(rm.size() == 0);
 }

@@ -1,6 +1,6 @@
 
 CCX = g++
-CCXFLAGS = -std=c++11 -pthread
+CCXFLAGS = -std=c++11 -pthread -Wall -Werror
 
 BTREEDIR = btrees
 TESTDIR = tests
@@ -9,7 +9,7 @@ OUTDIR = build
 
 BMKMAINS = bmk1
 BTREETESTMAINS = test_btree
-OTHERTESTMAINS = test_util tests_hc
+OTHERTESTMAINS = test_util tests_hc test_ws
 
 BTREEHS = $(wildcard $(BTREEDIR)/*.h)
 TESTHS = $(wildcard $(TESTSDIR)/*.h)
