@@ -38,19 +38,22 @@ void test_range_map_simple() {
 
     util::RangeMap<uint64_t, uint64_t> rm;
 
-    assert(!rm.lookup(0xDEADBEEF));
+    assert(!rm.find(0xDEADBEEF));
     assert(rm.size() == 0);
 
-    rm.insert_range(0, 10);
+    rm.insert(0, 10, 20);
 
-    assert(!rm.lookup(0xDEADBEEF));
-    assert(!rm.lookup(0));
+    assert(!rm.find(0xDEADBEEF));
+    assert(rm.find(0));
+    assert(**rm.find(0) == 20);
     assert(rm.size() == 1);
 
-    rm.insert_key(3, 4);
+    rm.insert(30, 40, 5);
 
-    assert(!rm.lookup(0xDEADBEEF));
-    assert(!rm.lookup(0));
-    assert(rm.lookup(3));
-    assert(rm.size() == 1);
+    assert(!rm.find(0xDEADBEEF));
+    assert(rm.find(0));
+    assert(**rm.find(0) == 20);
+    assert(rm.find(34));
+    assert(**rm.find(34) == 5);
+    assert(rm.size() == 2);
 }
