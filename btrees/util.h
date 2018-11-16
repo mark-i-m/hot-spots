@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <cassert>
 #include <type_traits>
+#include <pthread.h>
 
 namespace util {
 
@@ -70,9 +71,14 @@ private:
     //   low key -> (high key, T)
     std::map<K, std::pair<K, T>> ranges;
 
+    mutable pthread_rwlock_t lock;
+
 public:
     // Create an empty range map.
     RangeMap();
+
+    // Destroy a range map
+    ~RangeMap();
 
     // Map range [kl, kh) to value v. For simplicity and performance, we
     // assume that the _CALLER_ checks that no two ranges overlap and checks
@@ -99,8 +105,10 @@ public:
 
 template <typename K, typename T>
 maybe::Maybe<T *> RangeMap<K, T>::find(const K& k) {
+    pthread_rwlock_rdlock(&lock);
     auto it = ranges.upper_bound(k);
     if (it == ranges.begin()) {
+        pthread_rwlock_unlock(&lock);
         return maybe::Maybe<T *>();
     } else {
         --it;
@@ -108,27 +116,43 @@ maybe::Maybe<T *> RangeMap<K, T>::find(const K& k) {
 
     // it->second.first is the high key of the range.
     if (it->second.first > k) {
-        return maybe::Maybe<T *>(&it->second.second);
+        auto maybe = maybe::Maybe<T *>(&it->second.second);
+        pthread_rwlock_unlock(&lock);
+        return maybe;
     } else {
+        pthread_rwlock_unlock(&lock);
         return maybe::Maybe<T *>();
     }
 }
 
 template <typename K, typename T>
-RangeMap<K, T>::RangeMap() { }
+RangeMap<K, T>::RangeMap() {
+    int ret = pthread_rwlock_init(&lock, NULL);
+    assert(ret == 0);
+}
+
+template <typename K, typename T>
+RangeMap<K, T>::~RangeMap() {
+    int ret = pthread_rwlock_destroy(&lock);
+    assert(ret == 0);
+}
 
 template <typename K, typename T>
 void RangeMap<K, T>::insert(K kl, K kh, T v) {
+    pthread_rwlock_wrlock(&lock);
     ranges.insert({kl, {kh, v}});
+    pthread_rwlock_unlock(&lock);
 }
 
 template <typename K, typename T>
 T RangeMap<K, T>::remove(const K& kl, const K& kh) {
+    pthread_rwlock_wrlock(&lock);
     auto it = ranges.find(kl);
     assert(it->second.first == kh);
 
     T v = it->second.second;
     ranges.erase(it);
+    pthread_rwlock_unlock(&lock);
 
     return v;
 }
