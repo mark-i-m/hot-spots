@@ -6,7 +6,7 @@
 #include <cstdlib>
 #include <unordered_map>
 
-namespace ws {
+namespace btree_hybrid {
 
 // Tracks stats for ranges of pages that have been touched and chooses ranges
 // to evict.
@@ -89,6 +89,6 @@ void WS<K>::clear() {
     stats.clear();
 }
 
-} // namespace ws
+} // namespace btree_hybrid
 
 #endif

@@ -67,30 +67,25 @@ template <typename K, typename T>
 class RangeMap {
 private:
     // Contains the actual data. Has the following structure:
-    //   low key -> (high key, k-v mappings)
-    std::map<K, std::pair<K, std::unordered_map<K, T>>> ranges;
-
-    // Given a key, find the range it is mapped to.
-    maybe::Maybe<std::unordered_map<K, T> *> find_range(const K& k);
+    //   low key -> (high key, T)
+    std::map<K, std::pair<K, T>> ranges;
 
 public:
     // Create an empty range map.
     RangeMap();
 
-    // Insert range [kl, kh) into the map. For simplicity and performance, we
+    // Map range [kl, kh) to value v. For simplicity and performance, we
     // assume that the _CALLER_ checks that no two ranges overlap and checks
     // that kl < kh.
-    void insert_range(K kl, K kh);
+    void insert(K kl, K kh, T v);
 
-    // Insert (k, v) into the map. The _CALLER_ must ensure that there exists a
-    // range containing `k`.
-    void insert_key(K k, T v);
+    // Given a key, find the range it is mapped to.
+    maybe::Maybe<T *> find(const K& k);
 
-    // Lookup a key k in the map and return the associated value if it exists.
-    maybe::Maybe<T *> lookup(const K& k);
-
-    // Clear all entries in the map.
-    void clear();
+    // Remove range [kl, kh) from the `RangeMap`. For simplicity and
+    // performance, we assume that the _CALLER_ checks that [kl, kh) is in the
+    // map.
+    T remove(const K& kl, const K& kh);
 
     // Returns the number of ranges in the map.
     size_t size() const {
@@ -103,56 +98,39 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename K, typename T>
-maybe::Maybe<std::unordered_map<K, T> *> RangeMap<K, T>::find_range(const K& k) {
+maybe::Maybe<T *> RangeMap<K, T>::find(const K& k) {
     auto it = ranges.upper_bound(k);
     if (it == ranges.begin()) {
-        return maybe::Maybe<std::unordered_map<K, T> *>();
+        return maybe::Maybe<T *>();
     } else {
         --it;
     }
 
+    // it->second.first is the high key of the range.
     if (it->second.first > k) {
-        return maybe::Maybe<std::unordered_map<K, T> *>(&it->second.second);
+        return maybe::Maybe<T *>(&it->second.second);
     } else {
-        return maybe::Maybe<std::unordered_map<K, T> *>();
+        return maybe::Maybe<T *>();
     }
 }
 
 template <typename K, typename T>
-RangeMap<K, T>::RangeMap() {
+RangeMap<K, T>::RangeMap() { }
+
+template <typename K, typename T>
+void RangeMap<K, T>::insert(K kl, K kh, T v) {
+    ranges.insert({kl, {kh, v}});
 }
 
 template <typename K, typename T>
-void RangeMap<K, T>::insert_range(K kl, K kh) {
-    ranges.insert({kl, {kh, std::unordered_map<K, T>()}});
-}
+T RangeMap<K, T>::remove(const K& kl, const K& kh) {
+    auto it = ranges.find(kl);
+    assert(it->second.first == kh);
 
-template <typename K, typename T>
-void RangeMap<K, T>::insert_key(K k, T v) {
-    auto range = find_range(k);
-    assert(range);
-    (*range)->insert({k, v});
-}
+    T v = it->second.second;
+    ranges.erase(it);
 
-template <typename K, typename T>
-maybe::Maybe<T *> RangeMap<K, T>::lookup(const K& k) {
-    using Maybe = maybe::Maybe<T *>;
-
-    auto range = find_range(k);
-    if (!range) {
-        return Maybe();
-    }
-    auto val = (*range)->find(k);
-    if (val == (*range)->end()) {
-        return Maybe();
-    } else {
-        return Maybe(&val->second);
-    }
-}
-
-template <typename K, typename T>
-void RangeMap<K, T>::clear() {
-    ranges.clear();
+    return v;
 }
 
 } // namespace util
