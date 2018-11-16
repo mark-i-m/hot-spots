@@ -48,7 +48,7 @@ void test_simple() {
 
     // Touch the LRU
     assert(!ws.touch(15));
-    
+
     auto maybe2 = ws.touch(N * 100, N * 100 + 10, N * 100);
     assert(maybe2);
     assert(maybe2->first == 20);
