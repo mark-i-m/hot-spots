@@ -3,7 +3,7 @@
 
 // run using command :
 // g++ -std=c++11 -pthread eval.cpp -o eval.out
-// input bulk_load_limit, R, W. N
+// input bulk_load_limit, R, W, N, X
 
 // to dos :
 //
@@ -36,15 +36,46 @@ enum class BTreeType {
     BTreeByteReorder = 3,
 };
 
+uint64_t rdtsc(){
+    unsigned int lo,hi;
+    __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
+    return ((uint64_t)hi << 32) | lo;
+}
+
 //global variables
 std::atomic<std::uint64_t> counter = {0};
 bool ready=false;
 vector <bool> tready;
+vector<uint64_t> w_timer;
+vector<uint64_t> r_timer;
+
 int get_counter ()
 {
     return ++counter;
 }
-void reader_child (int thread_id, int ops, common::BTreeBase<uint64_t, uint64_t> *btree)
+
+void report_average_time (int X, int ops)
+{
+    uint64_t w=0;
+    int i;
+    for ( i=0;i<w_timer.size()-1;i++)
+    {
+        w+=w_timer[i];
+    }
+    cout<<"Average write time for "<<X<<" operations is : "<<w/X<<endl;
+    w=w+w_timer[i];
+    cout<<"Average write time for 1 operation is : "<<w/ops<<endl;
+    uint64_t r=0;
+    for ( i=0;i<r_timer.size()-1;i++)
+    {
+        r+=r_timer[i];
+    }
+    cout<<"Average read time for "<<X<<" operations is : "<<r/X<<endl;
+    r=r+r_timer[i];
+    cout<<"Average read time for 1 operation is : "<<r/ops<<endl;
+}
+
+void reader_child (int thread_id, int ops, common::BTreeBase<uint64_t, uint64_t> *btree, int X)
 {
     tready[thread_id] = true;
     //wait till all threads have spawned
@@ -54,6 +85,9 @@ void reader_child (int thread_id, int ops, common::BTreeBase<uint64_t, uint64_t>
     std::mt19937_64 eng(rd()); //Use the 64-bit Mersenne Twister 19937 generator
     //and seed it with entropy.
     std::uniform_int_distribution<unsigned long long> distr;
+    // each entry represents time of x operations except last entry. last entry represents time of last few ops%X operations.
+    int x=0;
+    uint64_t time_x=0;
     while (ops)
     {
         //generate a random number of uint_64 to read
@@ -65,23 +99,32 @@ void reader_child (int thread_id, int ops, common::BTreeBase<uint64_t, uint64_t>
         read.first = read_value;
         read.second = 0;
         cout<<"Thread "<<thread_id <<" reading Key "<<read_value<<endl;
+        uint64_t tick = rdtsc();
         btree->lookup(read.first, read.second);
-        cout<<"Value read is "<<read.second<<endl;
-        //
-        // to do call read function to read value
-        //
+        time_x+=rdtsc() - tick;
+        x++;
         ops--;
+        if (x==X || ops==0)
+        {
+            r_timer.push_back(time_x);
+            x=0;
+            time_x=0;
+        }
+        cout<<"Value read is "<<read.second<<endl;
     }
     return;
 }
 
-void writer_child(int thread_id, int ops, common::BTreeBase<uint64_t, uint64_t> *btree)
+void writer_child(int thread_id, int ops, common::BTreeBase<uint64_t, uint64_t> *btree, int X)
 {
     tready[thread_id] = true;
     //wait till all threads have spawned
     while (!ready) {}
 
     uint64_t write_value;
+    int x=0;
+    uint64_t time_x=0;
+    
     while (ops)
     {
         //generate a value for sequential write
@@ -91,8 +134,16 @@ void writer_child(int thread_id, int ops, common::BTreeBase<uint64_t, uint64_t> 
         write.first = write_value;
         write.second = rand();
         cout<<"Thread "<<thread_id <<" writing "<<write.first<<" "<<write.second<<endl;
+        uint64_t tick = rdtsc();
         btree->insert(write);
+        time_x+=rdtsc() - tick;
         ops--;
+        if (x==X || ops==0)
+        {
+            w_timer.push_back(time_x);
+            x=0;
+            time_x=0;
+        }
     }
 
     //
@@ -111,7 +162,7 @@ bool check_all_true (vector<bool> &arr)
     return true;
 }
 
-void test (int R, int W, int N, common::BTreeBase<uint64_t, uint64_t> *btree)
+void test (int R, int W, int N, common::BTreeBase<uint64_t, uint64_t> *btree, int X)
 {
     // ready variables to start the threads at the same time
 
@@ -121,7 +172,7 @@ void test (int R, int W, int N, common::BTreeBase<uint64_t, uint64_t> *btree)
     {
         std::thread readers [R];
         for (int i=0; i<R; i++)
-            readers[i] = std::thread(reader_child, i, N, btree);
+            readers[i] = std::thread(reader_child, i, N, btree, X);
         while (!check_all_true(tready)) {}
         ready = true;
 
@@ -132,7 +183,7 @@ void test (int R, int W, int N, common::BTreeBase<uint64_t, uint64_t> *btree)
     {
         std::thread writers [W];
         for (int i=0; i<W; i++)
-            writers[i] = std::thread(writer_child, i, N, btree);
+            writers[i] = std::thread(writer_child, i, N, btree, X);
         while (!check_all_true(tready)) {}
         ready = true;
         for (int i=0; i<W; i++)
@@ -142,11 +193,11 @@ void test (int R, int W, int N, common::BTreeBase<uint64_t, uint64_t> *btree)
     {
         std::thread readers [R];
         for (int i=0; i<R; i++)
-            readers[i] = std::thread(reader_child, i, N, btree);
+            readers[i] = std::thread(reader_child, i, N, btree, X);
 
         std::thread writers [W];
         for (int i=0; i<W; i++)
-            writers[i] = std::thread(writer_child, i+R, N, btree);
+            writers[i] = std::thread(writer_child, i+R, N, btree, X);
         cout<<"Checking if ready"<<ready<<endl;
         while (!check_all_true(tready)) {cout<<"Wait"<<endl;}
         cout<<"Now ready to go"<<endl;
@@ -221,16 +272,17 @@ int main()
         insert++;
     }
     // R is no. of reader threads, W is number of writer threads, N is number of operations each thread is supposed to do
-    int R, W, N;
-    cin>>R>>W>>N;
+    // X is the no. of operations after which we measure time taken.
+    int R, W, N, X;
+    cout<<"Enter no. of reader threads, writer threads, no. of operations per thread, and no. of operations after which we should report time.";
+    cin>>R>>W>>N>>X;
     tready.resize(R+W);
     for (int i=0; i<R+W; i++)
     {
         tready[i] = false;
     }
     counter.store(bulk_load_limit,std::memory_order_relaxed);
-    cout<<"Initial counter is "<<counter<<endl;
-    // to do timing???
-    test (R, W, N, btree);
+    test (R, W, N, btree, X);
+    report_average_time(X, N);
     return 0;
 }
