@@ -51,7 +51,7 @@ int get_counter() { return ++counter; }
 
 void report_average_time(int X, int ops) {
     uint64_t w = 0;
-    int i;
+    size_t i;
     for (i = 0; i < w_timer.size() - 1; i++) {
         w += w_timer[i];
     }
@@ -149,7 +149,7 @@ void writer_child(int thread_id, int ops,
 }
 
 bool check_all_true(vector<bool> &arr) {
-    for (int i = 0; i < arr.size(); i++) {
+    for (size_t i = 0; i < arr.size(); i++) {
         if (arr[i] == false) return false;
     }
     return true;
@@ -239,11 +239,15 @@ int main() {
                 return new btree_hybrid::BTree<Key, Value>();
             case BTreeType::BTreeByteReorder:
                 return new btree_bytereorder::BTree<Key, Value>();
+            default:
+                // should never happen
+                assert(false);
+                return nullptr;
         }
     };
 
     common::BTreeBase<Key, Value> *btree = new_btree_fn();
-    int insert = 1;
+    size_t insert = 1;
     srand(time(NULL));
     while (insert <= bulk_load_limit) {
         int value = rand();
@@ -257,7 +261,7 @@ int main() {
     int R, W, N, X;
     cout
         << "Enter no. of reader threads, writer threads, no. of operations per "
-           "thread, and no. of operations after which we should report time.";
+           "thread, and no. of operations after which we should report time.\n";
     cin >> R >> W >> N >> X;
     tready.resize(R + W);
     for (int i = 0; i < R + W; i++) {

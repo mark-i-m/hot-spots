@@ -400,7 +400,7 @@ public:
 
         // Parent of current node
         BTreeInner<Key> *parent = nullptr;
-        uint64_t versionParent;
+        uint64_t versionParent = 0;
 
         while (node->type == PageType::BTreeInner) {
             auto inner = static_cast<BTreeInner<Key> *>(node);
@@ -513,7 +513,7 @@ public:
 
         // Parent of current node
         BTreeInner<Key> *parent = nullptr;
-        uint64_t versionParent;
+        uint64_t versionParent = 0;
 
         while (node->type == PageType::BTreeInner) {
             auto inner = static_cast<BTreeInner<Key> *>(node);
@@ -574,7 +574,7 @@ public:
 
         // Parent of current node
         BTreeInner<Key> *parent = nullptr;
-        uint64_t versionParent;
+        uint64_t versionParent = 0;
 
         while (node->type == PageType::BTreeInner) {
             auto inner = static_cast<BTreeInner<Key> *>(node);

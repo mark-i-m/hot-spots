@@ -23,21 +23,17 @@ BMKMAINSTARGETS = $(patsubst %, $(OUTDIR)/bmk_%, $(BMKMAINS))
 
 CCXFLAGS += -I $(BTREEDIR) -I $(TESTDIR) -I $(BMKDIR)
 
-.PHONY: all tst bmk
+.PHONY: all
 
-all: tst bmk
-
-tst: $(TESTMAINSTARGETS)
-
-bmk: $(BMKMAINSTARGETS)
+all: $(TESTMAINSTARGETS) $(BMKMAINSTARGETS)
 
 $(OUTDIR):
 	mkdir $@
 
-$(OUTDIR)/test_%: $(OUTDIR) $(TESTDIR)/%.cc $(TESTCCS) $(BTREEHS) $(TESTHS)
+$(OUTDIR)/test_%: $(OUTDIR) $(TESTDIR)/%.cc $(TESTCCS)
 	$(CCX) $(CCXFLAGS) -ggdb -o $@ $(filter-out $<, $^)
 
-$(OUTDIR)/bmk_%: $(OUTDIR) $(BMKDIR)/%.cc $(BMKCCS) $(BTREEHS) $(BMKHS)
+$(OUTDIR)/bmk_%: $(OUTDIR) $(BMKDIR)/%.cc $(BMKCCS)
 	$(CCX) $(CCXFLAGS) -O3 -o $@ $(filter-out $<, $^)
 
 clean:
