@@ -7,7 +7,7 @@ TESTDIR = tests
 BMKDIR = benchmarks
 OUTDIR = build
 
-BMKMAINS = bmk1
+BMKMAINS = eval
 BTREETESTMAINS = test_btree
 OTHERTESTMAINS = test_util tests_hc test_ws
 
