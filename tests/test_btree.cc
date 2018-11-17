@@ -67,6 +67,10 @@ int main(int argc, char **argv) {
                 return new btree_hybrid::BTree<Key, Value>();
             case BTreeType::BTreeByteReorder:
                 return new btree_bytereorder::BTree<Key, Value>();
+            default:
+                // should never happen
+                assert(false);
+                return nullptr;
         }
     };
 
