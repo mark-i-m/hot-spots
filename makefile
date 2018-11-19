@@ -27,14 +27,13 @@ CCXFLAGS += -I $(BTREEDIR) -I $(TESTDIR) -I $(BMKDIR)
 
 all: $(TESTMAINSTARGETS) $(BMKMAINSTARGETS)
 
-$(OUTDIR):
-	mkdir $@
+$(OUTDIR)/test_%: $(TESTDIR)/%.cc $(BTREEHS) $(TESTHS)
+	@mkdir -p $(OUTDIR)
+	$(CCX) $(CCXFLAGS) -ggdb -o $@ $<
 
-$(OUTDIR)/test_%: $(OUTDIR) $(TESTDIR)/%.cc $(TESTCCS)
-	$(CCX) $(CCXFLAGS) -ggdb -o $@ $(filter-out $<, $^)
-
-$(OUTDIR)/bmk_%: $(OUTDIR) $(BMKDIR)/%.cc $(BMKCCS)
-	$(CCX) $(CCXFLAGS) -O3 -o $@ $(filter-out $<, $^)
+$(OUTDIR)/bmk_%: $(BMKDIR)/%.cc $(BTREEHS) $(BMKHS)
+	@mkdir -p $(OUTDIR)
+	$(CCX) $(CCXFLAGS) -O3 -o $@ $<
 
 clean:
 	rm -rf $(OUTDIR)
