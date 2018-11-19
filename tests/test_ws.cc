@@ -3,14 +3,18 @@
 #include "ws.h"
 
 #include <iostream>
+#include <vector>
+#include <thread>
 
 // All tests use the same type, for simplicity.
 using Key = uint64_t;
 
 void test_simple();
+void test_simple_concurrent();
 
 int main() {
     test_simple();
+    test_simple_concurrent();
 
     std::cout << "SUCCESS :)" << std::endl;
 }
@@ -57,4 +61,33 @@ void test_simple() {
     assert(!ws.is_hot(5));
     assert(ws.is_hot(15));
     assert(!ws.is_hot(25));
+}
+
+void test_simple_concurrent() {
+    std::cout << "test_simple_concurrent" << std::endl;
+
+    constexpr int TEST_SIZE = 1000000;
+    constexpr int N_THREADS = 10;
+
+    btree_hybrid::WS<Key, N_THREADS> ws;
+
+    // Data and routine for all threads.
+    auto f = [&ws](int tno) {
+        assert(!ws.touch(tno * 10, tno * 10 + 10, tno * 10 + 4));
+
+        for (int i = 0; i < TEST_SIZE; ++i) {
+            assert(!ws.touch(tno * 10 + (i % 10)));
+        }
+    };
+
+    // Start threads.
+    std::vector<std::thread> threads;
+    for (int i = 0; i < N_THREADS; ++i) {
+        threads.push_back(std::thread(f, i));
+    }
+
+    // Wait for threads to complete
+    for (auto& thread : threads) {
+        thread.join();
+    }
 }
