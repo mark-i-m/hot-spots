@@ -20,11 +20,12 @@ void test_simple() {
 
     constexpr int N = 10;
 
-    btree_hybrid::WS<Key> ws(N);
+    btree_hybrid::WS<Key, N> ws;
 
     // No evictions
-    for (int i = 0; i < 2 * N; ++i) {
-        assert(!ws.touch(0, 10, 1));
+    assert(!ws.touch(0, 10, 1));
+    for (int i = 1; i < 2 * N; ++i) {
+        assert(!ws.touch(1));
     }
 
     assert(ws.is_hot(5));
