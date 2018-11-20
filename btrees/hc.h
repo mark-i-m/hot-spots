@@ -29,7 +29,7 @@ struct HC {
     // Keys and Values
     Map remove(const K& kl, const K& kh);
     // Given a Key k, return a value if it's present
-    util::maybe::Maybe<V *> find(const K& k);
+    util::maybe::Maybe<V> find(const K& k);
 
 private:
     // Cached key and values for high contention pages
@@ -83,23 +83,24 @@ typename HC<K, V>::Map HC<K, V>::remove(const K& kl, const K& kh) {
 
 
 template <typename K, typename V>
-util::maybe::Maybe<V *> HC<K, V>::find(const K& k) {
+util::maybe::Maybe<V> HC<K, V>::find(const K& k) {
     pthread_rwlock_rdlock(&lock);
     auto maybe = hot_cache.find(k);
     if(!maybe) {
         pthread_rwlock_unlock(&lock);
-        return util::maybe::Maybe<V *>();
+        return util::maybe::Maybe<V>();
     } else {
         auto it = (*maybe)->find(k);
         if(it != (*maybe)->end()) {
-            // TODO: Pointer maybe invalidated after we release the lock? Make
-            // this simpler by using an int instead
-            auto maybe = util::maybe::Maybe<V *>(&it->second);
+            // We used to return a pointer here, but the pointer could be
+            // invalidated later if the element is evicted, so instead, we just
+            // return a copy.
+            auto maybe = util::maybe::Maybe<V>(it->second);
             pthread_rwlock_unlock(&lock);
             return maybe;
         } else {
             pthread_rwlock_unlock(&lock);
-            return util::maybe::Maybe<V *>();
+            return util::maybe::Maybe<V>();
         }
     }
 }

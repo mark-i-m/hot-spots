@@ -19,11 +19,10 @@ void test_simple() {
     assert(!hc.find(2));
     hc.insert(0, 10, 2, 6);
     assert(hc.find(2));
-    assert(**hc.find(2) == 6);
-    **hc.find(2) += 1;
+    assert(*hc.find(2) == 6);
     auto map = hc.remove(0, 10);
     assert(!hc.find(2));
     assert(map.size() == 1);
     assert(map.find(2) != map.end());
-    assert(map.find(2)->second == 7);
+    assert(map.find(2)->second == 6);
 }
