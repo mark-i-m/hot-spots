@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <pthread.h>
 #include <atomic>
+#include <functional>
 
 namespace btree_hybrid {
 
@@ -57,25 +58,28 @@ class WS {
     }
 
 public:
+
+    typedef std::function<void(K, K)> purge_fn;
+
     // Construct a WS with at most `N` pages.
     WS();
 
     ~WS();
 
     // Update stats by registering a touch for key `k`. If a range should be
-    // evicted, returns that range in a `Maybe`.
+    // evicted, `f` is invoked on that range while holding an exclusive lock.
     //
     // Note that the _CALLER_ should verify that `k` is in a range that is
     // _already_ in the WS. If it is not, use the other `touch`.
-    util::maybe::Maybe<std::pair<K, K>> touch(const K k);
+    void touch(const K k, purge_fn f);
 
     // Update stats by registering a touch for key `k` in range `[kl, kh)`
-    // which should _not_ already be in the WS. If a range should be evicted,
-    // returns that range in a `Maybe`.
+    // which should _not_ already be in the WS. If a range should be
+    // evicted, `f` is invoked on that range while holding an exclusive lock.
     //
     // Note that the _CALLER_ should verify that `[kl, kh)` is NOT _already_ in
     // the WS. If it is, use the other `touch`.
-    util::maybe::Maybe<std::pair<K, K>> touch(const K kl, const K kh, const K k);
+    void touch(const K kl, const K kh, const K k, purge_fn f);
 
     // Returns true iff the given key k is in a range in the WS.
     bool is_hot(const K& k);
@@ -115,7 +119,7 @@ WS<K, N>::~WS() {
 }
 
 template <typename K, size_t N>
-util::maybe::Maybe<std::pair<K, K>> WS<K, N>::touch(const K k) {
+void WS<K, N>::touch(const K k, purge_fn) {
     pthread_rwlock_rdlock(&lock);
 
     auto maybe = lru_map.find(k);
@@ -125,12 +129,10 @@ util::maybe::Maybe<std::pair<K, K>> WS<K, N>::touch(const K k) {
     set_mru(**maybe);
 
     pthread_rwlock_unlock(&lock);
-
-    return util::maybe::Maybe<std::pair<K, K>>();
 }
 
 template <typename K, size_t N>
-util::maybe::Maybe<std::pair<K, K>> WS<K, N>::touch(const K kl, const K kh, const K k) {
+void WS<K, N>::touch(const K kl, const K kh, const K k, purge_fn f) {
     assert(kl <= k && k < kh);
 
     pthread_rwlock_wrlock(&lock);
@@ -169,14 +171,11 @@ util::maybe::Maybe<std::pair<K, K>> WS<K, N>::touch(const K kl, const K kh, cons
     // Make MRU.
     set_mru(lru);
 
-    pthread_rwlock_unlock(&lock);
-
-    // Return evicted range if needed.
     if (lru_counter > 0) {
-        return util::maybe::Maybe<std::pair<K, K>>({evicted_low, evicted_high});
-    } else {
-        return util::maybe::Maybe<std::pair<K, K>>();
+        f(evicted_low, evicted_high);
     }
+
+    pthread_rwlock_unlock(&lock);
 }
 
 template <typename K, size_t N>
