@@ -25,4 +25,14 @@ void test_simple() {
     assert(map.size() == 1);
     assert(map.find(2) != map.end());
     assert(map.find(2)->second == 6);
+    hc.insert(0, 10, 2, 6);
+    hc.insert(0, 10, 1, 3);
+    hc.insert(0, 10, 3, 9);
+    hc.insert(0, 10, 5, 15);
+    hc.insert(0, 10, 4, 12);
+    auto map_find = hc.get_all(0, 10);
+    for(const auto& pair : map_find) {
+        assert(pair.second == 3 * pair.first);
+    }
+    assert(map_find.size() == 5);
 }

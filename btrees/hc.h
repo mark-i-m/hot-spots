@@ -25,6 +25,10 @@ struct HC {
     // Insert a range [kl, kh) into the RangeMap and subsequently insert the
     // key and value
     void insert(K kl, K kh, K k, V v);
+    // Given a range, get all the (Key, Value) pairs belonging to that range
+    // It's assumed that the range [kl, kh) is a distinct range already present
+    // in the hot_cache
+    Map get_all(K kl, K kh);
     // Remove a range [kl, kh) from the RangeMap and return the corresponding
     // Keys and Values
     Map remove(const K& kl, const K& kh);
@@ -74,6 +78,12 @@ void HC<K, V>::insert(K kl, K kh, K k, V v) {
         (*maybe)->insert({k, v});
     }
     pthread_rwlock_unlock(&lock);
+}
+
+template <typename K, typename V>
+typename HC<K, V>::Map HC<K, V>::get_all(K kl, K) {
+    // TODO : We're returning a pointer, lookout for SEGFAULTS!!
+    return **hot_cache.find(kl);
 }
 
 template <typename K, typename V>
