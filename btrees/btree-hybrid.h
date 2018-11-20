@@ -15,6 +15,7 @@
 
 #include "btree-base.h"
 #include "ws.h"
+#include "hc.h"
 #include "util.h"
 
 #include <immintrin.h>
@@ -333,10 +334,13 @@ struct BTreeInner : public BTreeInnerBase {
 };
 
 // A generic, thread-safe btree using OLC.
-template <class Key, class Value>
+template <class Key, class Value, size_t WSSize = 10>
 struct BTree : public common::BTreeBase<Key, Value> {
     // The root node of the btree.
     std::atomic<NodeBase *> root;
+
+    WS<Key, WSSize> ws;
+    HC<Key, Value> hc;
 
     // Construct a new btree with exactly one node, which is an empty leaf node.
     BTree() { root = new BTreeLeaf<Key, Value>(); }
@@ -475,6 +479,12 @@ struct BTree : public common::BTreeBase<Key, Value> {
     // value associated with `k` and return true. If `k` is not in the btree,
     // return false.
     bool lookup(Key k, Value &result) {
+        auto hc_find = hc.find(k);
+        if (hc_find) {
+            result = *hc_find;
+            return true;
+        }
+
         int restartCount = 0;
     restart:
         if (restartCount++) yield(restartCount);
