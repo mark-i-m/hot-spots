@@ -42,7 +42,7 @@ uint64_t rdtsc() {
 
 // global variables
 std::atomic<std::uint64_t> counter = {0};
-bool ready = false;
+std::atomic<bool> ready = {false};
 vector<bool> tready;
 vector<uint64_t> w_timer;
 vector<uint64_t> r_timer;
@@ -73,7 +73,7 @@ void reader_child(int thread_id, int ops,
                   common::BTreeBase<uint64_t, uint64_t> *btree, int X) {
     tready[thread_id] = true;
     // wait till all threads have spawned
-    while (!ready) {
+    while (!ready.load(std::memory_order_relaxed)) {
     };
     uint64_t read_value;
     std::random_device
@@ -115,7 +115,7 @@ void writer_child(int thread_id, int ops,
                   common::BTreeBase<uint64_t, uint64_t> *btree, int X) {
     tready[thread_id] = true;
     // wait till all threads have spawned
-    while (!ready) {
+    while (!ready.load(std::memory_order_relaxed)) {
     }
 
     uint64_t write_value;
