@@ -17,7 +17,8 @@
 #include "btree-bytereorder.h"
 #include "btree-hybrid.h"
 #include "btreeolc.h"
-
+#include "pinning.h"
+#include <sched.h>
 #include <atomic>
 #include <cassert>
 #include <cstdlib>
