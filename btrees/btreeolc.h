@@ -20,6 +20,7 @@
 #include <atomic>
 #include <cassert>
 #include <cstring>
+#include <iostream>
 
 namespace btreeolc {
 // Each page in the Btree can be either an inner node or a leaf node.
@@ -370,6 +371,22 @@ struct BTree : public common::BTreeBase<Key, Value> {
         NodeBase *node = root;
         uint64_t versionNode = node->readLockOrRestart(needRestart);
         if (needRestart || (node != root)) goto restart;
+
+        //if (node->type == PageType::BTreeInner && node->count > 0) {
+        //    auto inner = static_cast<BTreeInner<Key> *>(node);
+
+        //    std::cout << "root ";
+        //    for (int i = 0; i < node->count; ++i) {
+        //        std::cout << inner->keys[i] << " ";
+        //    }
+        //    std::cout << std::endl;
+
+        //    std::cout << inner->keys[0] << std::endl;
+        //    std::cout << inner->keys[1] << std::endl;
+        //    std::cout << inner->keys[inner->count - 1] << std::endl;
+        //} else {
+        //    std::cout << "no children" << std::endl;
+        //}
 
         // Parent of current node
         BTreeInner<Key> *parent = nullptr;

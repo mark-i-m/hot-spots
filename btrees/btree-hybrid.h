@@ -365,12 +365,30 @@ struct BTree : public common::BTreeBase<Key, Value> {
             _mm_pause();
     }
 
+    void bulk_insert(typename HC<Key, Value>::Map) {
+        // TODO
+    }
+
     // Insert the (k, v) pair into the tree.
     void insert(Key k, Value v) {
         int restartCount = 0;
     restart:
         if (restartCount++) yield(restartCount);
         bool needRestart = false;
+
+        // First, attempt to check the hotcache.
+        if (ws.is_hot(k)) {
+            // insert
+            hc.insert(k, v);
+
+            // evict/purge if needed
+            ws.touch(k, [this](Key kl, Key kh){
+                    auto to_purge = hc.get_all(kl, kh);
+                    bulk_insert(to_purge);
+                    hc.remove(kl, kh);
+                    });
+            return;
+        }
 
         // Current node
         NodeBase *node = root;
@@ -381,8 +399,17 @@ struct BTree : public common::BTreeBase<Key, Value> {
         BTreeInner<Key> *parent = nullptr;
         uint64_t versionParent = 0;
 
+        // Keep track of some properties as we descend the tree
+        bool is_root = true;
+        bool is_rightmost = true;
+
+        Key min_parent_key, max_parent_key; // only valid if not root or leftmost
+
         while (node->type == PageType::BTreeInner) {
             auto inner = static_cast<BTreeInner<Key> *>(node);
+
+            // The leaf cannot be the root
+            is_root = false;
 
             // Split eagerly if full
             if (inner->isFull()) {
@@ -422,7 +449,19 @@ struct BTree : public common::BTreeBase<Key, Value> {
             parent = inner;
             versionParent = versionNode;
 
-            node = inner->children[inner->lowerBound(k)];
+            const uint16_t parent_idx = inner->lowerBound(k);
+
+            // descend to the right
+            if (parent_idx < inner->count - 1) {
+                is_rightmost = false;
+            }
+
+            if (!is_rightmost) {
+                min_parent_key = inner->keys[parent_idx];
+                max_parent_key = inner->keys[parent_idx + 1];
+            }
+
+            node = inner->children[parent_idx];
             inner->checkOrRestart(versionNode, needRestart);
             if (needRestart) goto restart;
             versionNode = node->readLockOrRestart(needRestart);
@@ -469,8 +508,35 @@ struct BTree : public common::BTreeBase<Key, Value> {
                     goto restart;
                 }
             }
-            leaf->insert(k, v);
-            node->writeUnlock();
+
+            // Still holding write lock
+
+            // Maybe need to insert into hotcache
+            if (!is_root && !is_rightmost) {
+                if (ws.is_hot(k)) { // hot => do hotcache insert
+                    hc.insert(k, v);
+                    node->writeUnlock();
+                    ws.touch(k, [this](Key kl, Key kh) {
+                            auto to_purge = hc.get_all(kl, kh);
+                            bulk_insert(to_purge);
+                            hc.remove(kl, kh);
+                            });
+                } else { // not hot => do a btree insert
+                    leaf->insert(k, v);
+                    node->writeUnlock();
+                    ws.touch(min_parent_key, max_parent_key, k, [this](Key kl, Key kh) {
+                            auto to_purge = hc.get_all(kl, kh);
+                            bulk_insert(to_purge);
+                            hc.remove(kl, kh);
+                            });
+                }
+            }
+            // If root or leftmost, just do the normal thing... for simplicity
+            else {
+                leaf->insert(k, v);
+                node->writeUnlock();
+            }
+
             return;  // success
         }
     }

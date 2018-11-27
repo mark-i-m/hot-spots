@@ -57,7 +57,7 @@ void HC<K, V>::insert(K k, V v) {
     pthread_rwlock_wrlock(&lock);
     auto maybe = hot_cache.find(k);
     assert(maybe);
-    (*maybe)->insert(k, v);
+    (*maybe)->insert({k, v});
     pthread_rwlock_unlock(&lock);
 }
 
