@@ -26,9 +26,12 @@
 #include <random>
 #include <thread>
 #include <vector>
+#include <stdio.h>
+#include <unistd.h>
 
 using namespace std;
-
+int get_nprocs(void);
+int get_nprocs_conf(void);
 enum class BTreeType {
     BTreeOLC = 1,
     BTreeHybrid = 2,
@@ -43,13 +46,14 @@ uint64_t rdtsc() {
 
 // global variables
 std::atomic<std::uint64_t> counter = {0};
+std::atomic<std::uint64_t> cpu = {0};
 std::atomic<bool> ready = {false};
 vector<bool> tready;
 vector<uint64_t> w_timer;
 vector<uint64_t> r_timer;
 
 int get_counter() { return ++counter; }
-
+int get_cpu() { return ++cpu; }
 void report_average_time(int X, int ops) {
     uint64_t w = 0;
     size_t i;
@@ -72,6 +76,7 @@ void report_average_time(int X, int ops) {
 
 void reader_child(int thread_id, int ops,
                   common::BTreeBase<uint64_t, uint64_t> *btree, int X) {
+    set_cpu(get_cpu());
     tready[thread_id] = true;
     // wait till all threads have spawned
     while (!ready.load(std::memory_order_relaxed)) {
@@ -114,6 +119,8 @@ void reader_child(int thread_id, int ops,
 
 void writer_child(int thread_id, int ops,
                   common::BTreeBase<uint64_t, uint64_t> *btree, int X) {
+    set_cpu(get_cpu());
+    
     tready[thread_id] = true;
     // wait till all threads have spawned
     while (!ready.load(std::memory_order_relaxed)) {
@@ -200,6 +207,7 @@ void test(int R, int W, int N, common::BTreeBase<uint64_t, uint64_t> *btree,
 }
 
 int main() {
+    set_cpu(0);
     uint64_t bulk_load_limit = 0;
     cout << "Evaluate which BTree implementation? \n(1) : OLC \n(2) : Hybrid "
             "\n(3) : ByteReorder\n";
@@ -234,7 +242,7 @@ int main() {
     using Value = uint64_t;
     auto new_btree_fn = [type]() -> common::BTreeBase<Key, Value> * {
         switch (type) {
-            case BTreeType::BTreeOLC:
+	    case BTreeType::BTreeOLC:
                 return new btreeolc::BTree<Key, Value>();
             case BTreeType::BTreeHybrid:
                 return new btree_hybrid::BTree<Key, Value>();
@@ -269,6 +277,8 @@ int main() {
         tready[i] = false;
     }
     counter.store(bulk_load_limit, std::memory_order_relaxed);
+   // cout<<"This system has processors configured and  processors available.\n"<<get_nprocs_conf()<<" "<< get_nprocs();
+    //cout<<numCPU<<endl;
     test(R, W, N, btree, X);
     report_average_time(X, N);
     return 0;
