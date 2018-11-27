@@ -33,6 +33,7 @@ $(OUTDIR)/test_%: $(TESTDIR)/%.cc $(BTREEHS) $(TESTHS)
 
 $(OUTDIR)/bmk_%: $(BMKDIR)/%.cc $(BTREEHS) $(BMKHS)
 	@mkdir -p $(OUTDIR)
+	sudo cpupower frequency-set -g performance
 	$(CCX) $(CCXFLAGS) -O3 -o $@ $<
 
 clean:
