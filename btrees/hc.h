@@ -25,6 +25,10 @@ struct HC {
     // Insert a range [kl, kh) into the RangeMap and subsequently insert the
     // key and value
     void insert(K kl, K kh, K k, V v);
+    // Insert the range [kl, kh) into the RangeMap without any key/value pairs.
+    //
+    // The caller must check that the range is not already in the HC.
+    void insert_range(K kl, K kh);
     // Given a range, get all the (Key, Value) pairs belonging to that range
     // It's assumed that the range [kl, kh) is a distinct range already present
     // in the hot_cache
@@ -77,6 +81,13 @@ void HC<K, V>::insert(K kl, K kh, K k, V v) {
     else {
         (*maybe)->insert({k, v});
     }
+    pthread_rwlock_unlock(&lock);
+}
+
+template <typename K, typename V>
+void HC<K, V>::insert_range(K kl, K kh) {
+    pthread_rwlock_wrlock(&lock);
+    hot_cache.insert(kl, kh, Map());
     pthread_rwlock_unlock(&lock);
 }
 

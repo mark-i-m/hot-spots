@@ -174,6 +174,12 @@ struct BTreeLeaf : public BTreeLeafBase {
     BTreeLeaf() {
         count = 0;
         type = typeMarker;
+
+        // TODO: debugging
+        for (size_t i = 0; i < maxEntries; ++i) {
+            keys[i] = 0xDEADBEEF;
+            payloads[i] = 0xDEADBEEF;
+        }
     }
 
     // Returns true if this leaf is full. It needs to be split before we can
@@ -243,6 +249,13 @@ struct BTreeLeaf : public BTreeLeafBase {
         memcpy(newLeaf->payloads, payloads + count,
                sizeof(Payload) * newLeaf->count);
         sep = keys[count - 1];
+
+        // TODO: debugging
+        for (size_t i = count; i < maxEntries; ++i) {
+            keys[i] = 0xDEADBEEF;
+            payloads[i] = 0xDEADBEEF;
+        }
+
         return newLeaf;
     }
 };
@@ -271,6 +284,11 @@ struct BTreeInner : public BTreeInnerBase {
     BTreeInner() {
         count = 0;
         type = typeMarker;
+
+        // TODO: debugging
+        for (size_t i = 0; i < maxEntries; ++i) {
+            keys[i] = 0xDEADBEEF;
+        }
     }
 
     // Returns true if adding one more key would fill the node.
@@ -317,6 +335,12 @@ struct BTreeInner : public BTreeInnerBase {
                sizeof(Key) * (newInner->count + 1));
         memcpy(newInner->children, children + count + 1,
                sizeof(NodeBase *) * (newInner->count + 1));
+
+        // TODO: debugging
+        for (size_t i = count; i < maxEntries; ++i) {
+            keys[i] = 0xDEADBEEF;
+        }
+
         return newInner;
     }
 
@@ -509,7 +533,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
             // Find the elements we can insert now while respecting the amount
             // of free space and the max key.
             while (it != key_values.end()
-                    && l->maxEntries - new_elements > 0) {
+                    && (l->maxEntries - l->count) - new_elements > 0) {
                 if (leaf_max && it->first >= *leaf_max) {
                     break;
                 }
@@ -568,17 +592,25 @@ struct BTree : public common::BTreeBase<Key, Value> {
         bool needRestart = false;
 
         // First, attempt to check the hotcache.
-        if (!in_bulk_insert && ws.is_hot(k)) {
-            // insert
-            hc.insert(k, v);
+        if (!in_bulk_insert) {
+            ws.read_lock();
 
-            // evict/purge if needed
-            ws.touch(k, [this](Key kl, Key kh){
-                    auto to_purge = hc.get_all(kl, kh);
-                    bulk_insert(to_purge);
-                    hc.remove(kl, kh);
-                    });
-            return;
+            if (ws.is_hot_no_lock(k)) {
+                // insert
+                hc.insert(k, v);
+
+                // evict/purge if needed
+                ws.touch_no_lock(k, [this](Key kl, Key kh){
+                        auto to_purge = hc.get_all(kl, kh);
+                        bulk_insert(to_purge);
+                        hc.remove(kl, kh);
+                        });
+
+                ws.read_unlock();
+                return;
+            }
+
+            ws.read_unlock();
         }
 
         // Current node
@@ -595,7 +627,8 @@ struct BTree : public common::BTreeBase<Key, Value> {
         bool is_leftmost = true;
         bool is_rightmost = true;
 
-        Key min_parent_key, max_parent_key; // only valid if not root or leftmost
+        Key min_parent_key = 0,
+            max_parent_key = 0; // only valid if not root or leftmost
 
         while (node->type == PageType::BTreeInner) {
             auto inner = static_cast<BTreeInner<Key> *>(node);
@@ -718,18 +751,31 @@ struct BTree : public common::BTreeBase<Key, Value> {
 
             // Maybe need to insert into hotcache
             if (!is_root && !in_bulk_insert) {
-                if (ws.is_hot(k)) { // hot => do hotcache insert
+                auto lock_failed = ws.try_read_lock();
+
+                if (lock_failed) {
+                    node->writeUnlock();
+                    goto restart;
+                }
+
+                if (ws.is_hot_no_lock(k)) { // hot => do hotcache insert
                     hc.insert(k, v);
                     node->writeUnlock();
-                    ws.touch(k, [this](Key kl, Key kh) {
+                    ws.touch_no_lock(k, [this](Key kl, Key kh) {
                             auto to_purge = hc.get_all(kl, kh);
                             bulk_insert(to_purge);
                             hc.remove(kl, kh);
                             });
-                } else { // not hot => do a btree insert
+                    ws.read_unlock();
+                    return;
+                }
+                ws.read_unlock();
+
+                // not hot => do a btree insert
                     leaf->insert(k, v);
                     node->writeUnlock();
 
+                ws.write_lock();
                     if (k < min_parent_key) {
                         min_parent_key = k - leaf->maxEntries;
                         max_parent_key = k + 1;
@@ -739,7 +785,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
                     }
 
                     bool should_hc =
-                        ws.touch(min_parent_key, max_parent_key, k, [this](Key kl, Key kh) {
+                        ws.touch_no_lock(min_parent_key, max_parent_key, k, [this](Key kl, Key kh) {
                             auto to_purge = hc.get_all(kl, kh);
                             bulk_insert(to_purge);
                             hc.remove(kl, kh);
@@ -748,9 +794,9 @@ struct BTree : public common::BTreeBase<Key, Value> {
                     // previous statement and the next one, it will be secretly
                     // in the HC, which is incorrect.
                     if (should_hc) {
-                        hc.insert(min_parent_key, max_parent_key, k, v);
+                        hc.insert_range(min_parent_key, max_parent_key);
                     }
-                }
+                ws.write_unlock();
             }
             // If root or leftmost, just do the normal thing... for simplicity
             else {

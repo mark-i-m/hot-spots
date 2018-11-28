@@ -72,6 +72,26 @@ public:
     // Note that the _CALLER_ should verify that `k` is in a range that is
     // _already_ in the WS. If it is not, use the other `touch`.
     void touch(const K k, purge_fn f);
+    void touch_no_lock(const K k, purge_fn f);
+
+    // Grab the read lock ugh...
+    void read_lock() {
+        pthread_rwlock_rdlock(&lock);
+    }
+    int try_read_lock() {
+        return pthread_rwlock_tryrdlock(&lock);
+    }
+    void read_unlock() {
+        pthread_rwlock_unlock(&lock);
+    }
+
+    // Grab the write lock ugh...
+    void write_lock() {
+        pthread_rwlock_wrlock(&lock);
+    }
+    void write_unlock() {
+        pthread_rwlock_unlock(&lock);
+    }
 
     // Update stats by registering a touch for key `k` in range `[kl, kh)`
     // which should _not_ already be in the WS. If a range should be
@@ -82,9 +102,11 @@ public:
     // Note that the _CALLER_ should verify that `[kl, kh)` is NOT _already_ in
     // the WS. If it is, use the other `touch`.
     bool touch(const K kl, const K kh, const K k, purge_fn f);
+    bool touch_no_lock(const K kl, const K kh, const K k, purge_fn f);
 
     // Returns true iff the given key k is in a range in the WS.
     bool is_hot(const K& k);
+    bool is_hot_no_lock(const K& k);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -131,6 +153,15 @@ void WS<K, N>::touch(const K k, purge_fn) {
     set_mru(**maybe);
 
     pthread_rwlock_unlock(&lock);
+}
+
+template <typename K, size_t N>
+void WS<K, N>::touch_no_lock(const K k, purge_fn) {
+    auto maybe = lru_map.find(k);
+    assert(maybe);
+
+    // Set to MRU
+    set_mru(**maybe);
 }
 
 template <typename K, size_t N>
@@ -183,11 +214,62 @@ bool WS<K, N>::touch(const K kl, const K kh, const K k, purge_fn f) {
 }
 
 template <typename K, size_t N>
+bool WS<K, N>::touch_no_lock(const K kl, const K kh, const K k, purge_fn f) {
+    assert(kl <= k && k < kh);
+
+    // Find a free slot and the LRU.
+    size_t lru = 0;
+    size_t lru_counter = (size_t)-1;
+
+    K evicted_low;
+    K evicted_high;
+
+    for (size_t i = 0; i < N; ++i) {
+        auto c = counters[i].load();
+
+        if (c < lru_counter) {
+            lru_counter = c;
+            lru = i;
+        }
+    }
+
+    // lru_counter == 0 => free
+
+    // None free. Need to evict LRU.
+    if (lru_counter > 0) {
+        counters[lru].store(0);
+        evicted_low = low_keys[lru];
+        evicted_high = high_keys[lru];
+        lru_map.remove(evicted_low, evicted_high);
+    }
+
+    // Insert new.
+    low_keys[lru] = kl;
+    high_keys[lru] = kh;
+    lru_map.insert(kl, kh, lru);
+
+    // Make MRU.
+    set_mru(lru);
+
+    if (lru_counter > 0) {
+        f(evicted_low, evicted_high);
+    }
+
+    return true;
+}
+
+template <typename K, size_t N>
 bool WS<K, N>::is_hot(const K& k) {
     pthread_rwlock_rdlock(&lock);
     auto maybe = lru_map.find(k);
     pthread_rwlock_unlock(&lock);
 
+    return maybe;
+}
+
+template <typename K, size_t N>
+bool WS<K, N>::is_hot_no_lock(const K& k) {
+    auto maybe = lru_map.find(k);
     return maybe;
 }
 

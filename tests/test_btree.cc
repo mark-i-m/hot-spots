@@ -98,8 +98,9 @@ void test_simple_insert_read(common::BTreeBase<Key, Value> *btree) {
 void test_insert_read(common::BTreeBase<Key, Value> *btree) {
     std::cout << "test_insert_read" << std::endl;
 
-    constexpr int TEST_SIZE = 1000000;
+    constexpr int TEST_SIZE = 100000;
 
+    //const auto pairs = gen_data<Key, Value>(TEST_SIZE);
     const auto pairs = gen_data<Key, Value>(TEST_SIZE);
     for (const auto& pair : pairs) {
         btree->insert(pair);

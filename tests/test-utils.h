@@ -34,4 +34,15 @@ std::vector<std::pair<Key, Value>> gen_data(const size_t n) {
     return pairs;
 }
 
+template <typename Key, typename Value>
+std::vector<std::pair<Key, Value>> gen_data_seq(const size_t n) {
+    std::vector<std::pair<Key, Value>> pairs;
+
+    for (size_t i = 0; i < n; ++i) {
+        pairs.push_back({i, i});
+    }
+
+    return pairs;
+}
+
 #endif
