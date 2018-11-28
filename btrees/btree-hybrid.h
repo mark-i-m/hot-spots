@@ -18,11 +18,13 @@
 #include "hc.h"
 #include "util.h"
 
+#include <algorithm>
 #include <immintrin.h>
 #include <sched.h>
 #include <atomic>
 #include <cassert>
 #include <cstring>
+#include <vector>
 
 namespace btree_hybrid {
 // Each page in the Btree can be either an inner node or a leaf node.
@@ -365,8 +367,160 @@ struct BTree : public common::BTreeBase<Key, Value> {
             _mm_pause();
     }
 
-    void bulk_insert(typename HC<Key, Value>::Map) {
-        // TODO
+    std::pair<BTreeLeaf<Key, Value>*, util::maybe::Maybe<Key>> bulk_insert_traverse(Key k) {
+         int restartCount = 0;
+    restart:
+        if (restartCount++) yield(restartCount);
+        bool needRestart = false;
+
+        // Current node
+        NodeBase *node = root;
+        uint64_t versionNode = node->readLockOrRestart(needRestart);
+        if (needRestart || (node != root)) goto restart;
+
+        // Parent of current node
+        BTreeInner<Key> *parent = nullptr;
+        uint64_t versionParent = 0;
+        uint16_t parent_idx;
+        bool is_rightmost = true;
+
+        while (node->type == PageType::BTreeInner) {
+            auto inner = static_cast<BTreeInner<Key> *>(node);
+
+            // Split eagerly if full
+            if (inner->isFull()) {
+                // Lock
+                if (parent) {
+                    parent->upgradeToWriteLockOrRestart(versionParent,
+                                                        needRestart);
+                    if (needRestart) goto restart;
+                }
+                node->upgradeToWriteLockOrRestart(versionNode, needRestart);
+                if (needRestart) {
+                    if (parent) parent->writeUnlock();
+                    goto restart;
+                }
+                if (!parent && (node != root)) {  // there's a new parent
+                    node->writeUnlock();
+                    goto restart;
+                }
+                // Split
+                Key sep;
+                BTreeInner<Key> *newInner = inner->split(sep);
+                if (parent)
+                    parent->insert(sep, newInner);
+                else
+                    makeRoot(sep, inner, newInner);
+                // Unlock and restart
+                node->writeUnlock();
+                if (parent) parent->writeUnlock();
+                goto restart;
+            }
+
+            if (parent) {
+                parent->readUnlockOrRestart(versionParent, needRestart);
+                if (needRestart) goto restart;
+            }
+
+            parent = inner;
+            versionParent = versionNode;
+            parent_idx = inner->lowerBound(k);
+
+            // descend to the left
+            if (parent_idx < inner->count - 1) {
+                is_rightmost = false;
+            }
+
+            node = inner->children[parent_idx];
+            inner->checkOrRestart(versionNode, needRestart);
+            if (needRestart) goto restart;
+            versionNode = node->readLockOrRestart(needRestart);
+            if (needRestart) goto restart;
+        }
+
+        auto leaf = static_cast<BTreeLeaf<Key, Value> *>(node);
+
+        // Split leaf if full
+        if (leaf->count == leaf->maxEntries) {
+            // Lock
+            if (parent) {
+                parent->upgradeToWriteLockOrRestart(versionParent, needRestart);
+                if (needRestart) goto restart;
+            }
+            node->upgradeToWriteLockOrRestart(versionNode, needRestart);
+            if (needRestart) {
+                if (parent) parent->writeUnlock();
+                goto restart;
+            }
+            if (!parent && (node != root)) {  // there's a new parent
+                node->writeUnlock();
+                goto restart;
+            }
+            // Split
+            Key sep;
+            BTreeLeaf<Key, Value> *newLeaf = leaf->split(sep);
+            if (parent)
+                parent->insert(sep, newLeaf);
+            else
+                makeRoot(sep, leaf, newLeaf);
+            // Unlock and restart
+            node->writeUnlock();
+            if (parent) parent->writeUnlock();
+            goto restart;
+        } else {
+            // only lock leaf node
+            node->upgradeToWriteLockOrRestart(versionNode, needRestart);
+            if (needRestart) goto restart;
+            util::maybe::Maybe<Key> leaf_max;
+            if (parent) {
+                if(!is_rightmost) {
+                    leaf_max = util::maybe::Maybe<Key>(parent->keys[parent_idx + 1]);
+                }
+                parent->readUnlockOrRestart(versionParent, needRestart);
+                if (needRestart) {
+                    node->writeUnlock();
+                    goto restart;
+                }
+            }
+            return std::pair<BTreeLeaf<Key, Value>*, util::maybe::Maybe<Key>>{leaf, leaf_max};  // success
+        }
+    }
+
+    void bulk_insert(typename HC<Key, Value>::Map m) {
+        // sorted list of key/value pairs
+        std::vector<std::pair<Key, Value>> key_values(m.begin(), m.end());
+        std::sort(key_values.begin(), key_values.end());
+
+        // insertions
+        auto it = key_values.begin();
+        while(it != key_values.end()) {
+            // Find leaf of insertion... locked
+            BTreeLeaf<Key, Value>* l;
+            util::maybe::Maybe<Key> leaf_max;
+            std::tie(l, leaf_max) = bulk_insert_traverse(it->first);
+
+            // Insert as many elements as we can while respecting the amount of
+            // free space and the max key.
+            while (it != key_values.end() && l->maxEntries - l->count > 0) {
+                if (leaf_max && it->first >= *leaf_max) {
+                    break;
+                }
+                // insert
+                l->keys[l->count] = it->first;
+                l->payloads[l->count] = it->second;
+                l->count++;
+                ++it;
+                // TODO: need to keep node sorted
+            }
+            // unlock leaf
+            l->writeUnlock();
+
+            // need to do a normal insertion to ensure space
+            if(it != key_values.end()) {
+                insert(it->first, it->second);
+                ++it;
+            }
+        }
     }
 
     // Insert the (k, v) pair into the tree.
@@ -451,7 +605,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
 
             const uint16_t parent_idx = inner->lowerBound(k);
 
-            // descend to the right
+            // descend to the left
             if (parent_idx < inner->count - 1) {
                 is_rightmost = false;
             }
