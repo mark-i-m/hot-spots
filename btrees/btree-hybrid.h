@@ -499,19 +499,48 @@ struct BTree : public common::BTreeBase<Key, Value> {
             util::maybe::Maybe<Key> leaf_max;
             std::tie(l, leaf_max) = bulk_insert_traverse(it->first);
 
-            // Insert as many elements as we can while respecting the amount of
-            // free space and the max key.
-            while (it != key_values.end() && l->maxEntries - l->count > 0) {
+            auto new_elements = 0;
+            auto end = it;
+
+            // Find the elements we can insert now while respecting the amount
+            // of free space and the max key.
+            while (it != key_values.end()
+                    && l->maxEntries - new_elements > 0) {
                 if (leaf_max && it->first >= *leaf_max) {
                     break;
                 }
-                // insert
-                l->keys[l->count] = it->first;
-                l->payloads[l->count] = it->second;
-                l->count++;
-                ++it;
-                // TODO: need to keep node sorted
+
+                ++it; ++end;
+                ++new_elements;
             }
+
+            // Merge the existing entries with the purged entries in sorted
+            // order from the end.  Doing it from the end means that we always
+            // have space and only need to move each element once.
+            //
+            // "end" idx == l->count + new_elements - 1
+            auto keys_end_idx = l->count + new_elements - 1; // ultimately will be the end idx
+            auto to_insert = new_elements; // number elements remaining to insert from purged
+            auto existing_end_idx = l->count; // current last inserted idx
+
+            while (to_insert > 0) {
+                if (end->first > l->keys[existing_end_idx]) { // insert *end
+                    l->keys[keys_end_idx] = std::move(end->first);
+                    l->payloads[keys_end_idx] = std::move(end->second);
+                    --end;
+                } else {
+                    l->keys[keys_end_idx] = std::move(l->keys[existing_end_idx]);
+                    l->payloads[keys_end_idx] = std::move(l->payloads[existing_end_idx]);
+                    --existing_end_idx;
+                }
+
+                --keys_end_idx;
+                --to_insert;
+            }
+
+            // Update stats
+            l->count += new_elements;
+
             // unlock leaf
             l->writeUnlock();
 
