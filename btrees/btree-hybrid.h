@@ -487,6 +487,10 @@ struct BTree : public common::BTreeBase<Key, Value> {
     }
 
     void bulk_insert(typename HC<Key, Value>::Map m) {
+        if (m.empty()) {
+            return;
+        }
+
         // sorted list of key/value pairs
         std::vector<std::pair<Key, Value>> key_values(m.begin(), m.end());
         std::sort(key_values.begin(), key_values.end());
@@ -546,21 +550,25 @@ struct BTree : public common::BTreeBase<Key, Value> {
 
             // need to do a normal insertion to ensure space
             if(it != key_values.end()) {
-                insert(it->first, it->second);
+                insert_inner(it->first, it->second, true);
                 ++it;
             }
         }
     }
 
-    // Insert the (k, v) pair into the tree.
     void insert(Key k, Value v) {
+        insert_inner(k, v, false);
+    }
+
+    // Insert the (k, v) pair into the tree.
+    void insert_inner(Key k, Value v, bool in_bulk_insert) {
         int restartCount = 0;
     restart:
         if (restartCount++) yield(restartCount);
         bool needRestart = false;
 
         // First, attempt to check the hotcache.
-        if (ws.is_hot(k)) {
+        if (!in_bulk_insert && ws.is_hot(k)) {
             // insert
             hc.insert(k, v);
 
@@ -584,6 +592,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
 
         // Keep track of some properties as we descend the tree
         bool is_root = true;
+        bool is_leftmost = true;
         bool is_rightmost = true;
 
         Key min_parent_key, max_parent_key; // only valid if not root or leftmost
@@ -638,8 +647,21 @@ struct BTree : public common::BTreeBase<Key, Value> {
             if (parent_idx < inner->count - 1) {
                 is_rightmost = false;
             }
+            // descend to the right
+            else if (parent_idx > 0) {
+                is_leftmost = false;
+            }
 
-            if (!is_rightmost) {
+            // If we are inserting either in the rightmost or leftmost node,
+            // make up a max. It doesn't matter too much, but there may be a
+            // pathological case.
+            if (is_rightmost) {
+                min_parent_key = inner->keys[parent_idx];
+                max_parent_key = min_parent_key + inner->maxEntries;
+            } else if (is_leftmost) {
+                max_parent_key = inner->keys[parent_idx];
+                min_parent_key = max_parent_key - inner->maxEntries;
+            } else {
                 min_parent_key = inner->keys[parent_idx];
                 max_parent_key = inner->keys[parent_idx + 1];
             }
@@ -695,7 +717,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
             // Still holding write lock
 
             // Maybe need to insert into hotcache
-            if (!is_root && !is_rightmost) {
+            if (!is_root && !in_bulk_insert) {
                 if (ws.is_hot(k)) { // hot => do hotcache insert
                     hc.insert(k, v);
                     node->writeUnlock();
@@ -707,11 +729,27 @@ struct BTree : public common::BTreeBase<Key, Value> {
                 } else { // not hot => do a btree insert
                     leaf->insert(k, v);
                     node->writeUnlock();
-                    ws.touch(min_parent_key, max_parent_key, k, [this](Key kl, Key kh) {
+
+                    if (k < min_parent_key) {
+                        min_parent_key = k - leaf->maxEntries;
+                        max_parent_key = k + 1;
+                    } else if (k >= max_parent_key) {
+                        min_parent_key = k;
+                        max_parent_key = k + leaf->maxEntries;
+                    }
+
+                    bool should_hc =
+                        ws.touch(min_parent_key, max_parent_key, k, [this](Key kl, Key kh) {
                             auto to_purge = hc.get_all(kl, kh);
                             bulk_insert(to_purge);
                             hc.remove(kl, kh);
                             });
+                    // NOTE: race condition: if the range is purged between the
+                    // previous statement and the next one, it will be secretly
+                    // in the HC, which is incorrect.
+                    if (should_hc) {
+                        hc.insert(min_parent_key, max_parent_key, k, v);
+                    }
                 }
             }
             // If root or leftmost, just do the normal thing... for simplicity

@@ -83,7 +83,12 @@ void HC<K, V>::insert(K kl, K kh, K k, V v) {
 template <typename K, typename V>
 typename HC<K, V>::Map HC<K, V>::get_all(K kl, K) {
     // TODO : We're returning a pointer, lookout for SEGFAULTS!!
-    return **hot_cache.find(kl);
+    auto maybe = hot_cache.find(kl);
+    if (maybe) {
+        return **maybe;
+    } else {
+        return typename HC<K, V>::Map();
+    }
 }
 
 template <typename K, typename V>

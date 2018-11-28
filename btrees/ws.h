@@ -77,9 +77,11 @@ public:
     // which should _not_ already be in the WS. If a range should be
     // evicted, `f` is invoked on that range while holding an exclusive lock.
     //
+    // Returns true iff the new range became hot.
+    //
     // Note that the _CALLER_ should verify that `[kl, kh)` is NOT _already_ in
     // the WS. If it is, use the other `touch`.
-    void touch(const K kl, const K kh, const K k, purge_fn f);
+    bool touch(const K kl, const K kh, const K k, purge_fn f);
 
     // Returns true iff the given key k is in a range in the WS.
     bool is_hot(const K& k);
@@ -132,7 +134,7 @@ void WS<K, N>::touch(const K k, purge_fn) {
 }
 
 template <typename K, size_t N>
-void WS<K, N>::touch(const K kl, const K kh, const K k, purge_fn f) {
+bool WS<K, N>::touch(const K kl, const K kh, const K k, purge_fn f) {
     assert(kl <= k && k < kh);
 
     pthread_rwlock_wrlock(&lock);
@@ -176,6 +178,8 @@ void WS<K, N>::touch(const K kl, const K kh, const K k, purge_fn f) {
     }
 
     pthread_rwlock_unlock(&lock);
+
+    return true;
 }
 
 template <typename K, size_t N>
