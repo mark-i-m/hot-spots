@@ -586,6 +586,13 @@ struct BTree : public common::BTreeBase<Key, Value> {
 
     // Insert the (k, v) pair into the tree.
     void insert_inner(Key k, Value v, bool in_bulk_insert) {
+        // Purge routine
+        auto purge_fn = [this](Key kl, Key kh){
+            hc.purge(kl, kh, [this](typename HC<Key, Value>::Map to_purge) {
+                        bulk_insert(to_purge);
+                    });
+        };
+
         int restartCount = 0;
     restart:
         if (restartCount++) yield(restartCount);
@@ -600,12 +607,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
                 hc.insert(k, v);
 
                 // evict/purge if needed
-                ws.touch_no_lock(k, [this](Key kl, Key kh){
-                        assert(false);
-                        auto to_purge = hc.get_all(kl, kh);
-                        bulk_insert(to_purge);
-                        hc.remove(kl, kh);
-                        });
+                ws.touch_no_lock(k, purge_fn);
 
                 ws.read_unlock();
                 return;
@@ -762,12 +764,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
                 if (ws.is_hot_no_lock(k)) { // hot => do hotcache insert
                     hc.insert(k, v);
                     node->writeUnlock();
-                    ws.touch_no_lock(k, [this](Key kl, Key kh) {
-                            assert(false);
-                            auto to_purge = hc.get_all(kl, kh);
-                            bulk_insert(to_purge);
-                            hc.remove(kl, kh);
-                            });
+                    ws.touch_no_lock(k, purge_fn);
                     ws.read_unlock();
                     return;
                 }
@@ -788,19 +785,10 @@ struct BTree : public common::BTreeBase<Key, Value> {
 
                     if (ws.is_hot_no_lock(k)) { // check again
                         hc.insert(k, v);
-                        ws.touch_no_lock(k, [this](Key kl, Key kh) {
-                                assert(false);
-                                auto to_purge = hc.get_all(kl, kh);
-                                bulk_insert(to_purge);
-                                hc.remove(kl, kh);
-                                });
+                        ws.touch_no_lock(k, purge_fn);
                     } else {
                         bool should_hc =
-                        ws.touch_no_lock(min_parent_key, max_parent_key, k, [this](Key kl, Key kh) {
-                            auto to_purge = hc.get_all(kl, kh);
-                            bulk_insert(to_purge);
-                            hc.remove(kl, kh);
-                            });
+                        ws.touch_no_lock(min_parent_key, max_parent_key, k, purge_fn);
                         // NOTE: race condition: if the range is purged between the
                         // previous statement and the next one, it will be secretly
                         // in the HC, which is incorrect.

@@ -9,6 +9,7 @@
 #include "btree-hybrid.h"
 #include "btree-bytereorder.h"
 
+#include <unistd.h>
 #include <cassert>
 #include <iostream>
 #include <string.h>
@@ -229,6 +230,7 @@ void test_insert_read_concurrent_contend(common::BTreeBase<Key, Value> *btree) {
 
             Value foundv;
             bool found = btree->lookup(key, foundv);
+
             assert(found);
             assert(v == foundv);
         }

@@ -6,6 +6,7 @@
 #include "util.h"
 #include <unordered_map>
 #include <pthread.h>
+#include <functional>
 
 namespace btree_hybrid {
 
@@ -38,6 +39,20 @@ struct HC {
     Map remove(const K& kl, const K& kh);
     // Given a Key k, return a value if it's present
     util::maybe::Maybe<V> find(const K& k);
+
+    //HACK
+    void purge(const K& kl, const K& kh, std::function<void(Map)> f) {
+        pthread_rwlock_wrlock(&lock);
+        
+        auto to_purge = hot_cache.find(kl);
+        if (to_purge) {
+            f(**to_purge);
+        }
+        remove(kl, kh);
+
+        pthread_rwlock_unlock(&lock);
+    }
+    
 
 private:
     // Cached key and values for high contention pages
