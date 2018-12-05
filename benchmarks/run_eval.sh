@@ -129,7 +129,7 @@ RESULTS_DIR="${PROJECT_ROOT_DIR}/results"
 # Create the results directory if it doesn't exist
 if [ ! -d "$RESULTS_DIR" ]
 then
-    mkdir $RESULTS_DIR
+    sudo mkdir $RESULTS_DIR
 fi
 
 # Set the cpu frequency
@@ -142,8 +142,8 @@ do
     do
 	# Set the directory into which the experiment data will be stored
 	EXPT_TIME=`date '+%Y-%m-%d-%H-%M-%S'`
-	EXPT_DIR="${RESULTS_DIR}/${EXPT_TIME}"
-	mkdir $EXPT_DIR
+	EXPT_DIR="${RESULTS_DIR}/${EXPT_TIME}_r${i}_w${j}_t${T}_b${B}_n${N}_x${X}"
+	sudo mkdir $EXPT_DIR
         ../build/bmk_eval $T $B $i $j $N $X "$EXPT_DIR/" > "${EXPT_DIR}/expt.log"
     done
 done
