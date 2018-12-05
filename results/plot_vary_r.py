@@ -3,6 +3,71 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+import re
+import sys
+import os
+
+# Usage: ./script (avg|99) <list of directories that contain data>
+#   avg indicates that we compute avg throughput
+#   99  indicates computing 99%-tile (slowest) throughput
+#
+# All runs should have the same value for W, B, X, N, and should be run with
+# the same implementation; only R varies.
+USAGE = """
+Usage: ./script (avg|99) <list of directories that contain data>
+  avg indicates that we compute avg throughput
+  99  indicates computing 99%-tile (slowest) throughput
+
+All runs should have the same value for W, B, X, N, and should be run with
+the same implementation; only R varies.
+"""
+
+if len(sys.argv) < 3:
+    print(USAGE)
+    sys.exit(1)
+elif sys.argv[1] == "avg":
+    is_avg = True
+elif sys.argv[1] == "99":
+    is_avg = False
+else:
+    print(USAGE)
+    sys.exit(1)
+
+# parse file names and extract parameters
+#
+# we populate all of these parameters in increasing order of R
+class Experiment:
+    def __init__(self, directory):
+        self.directory = directory
+
+        REGEX = """([0-9-]+)_btree_([a-zA-Z]+)_r([0-9]+)_w([0-9]+)_n([0-9]+)_x([0-9]+)_b([0-9]+)/?"""
+
+        cleaned_dir_name = os.path.basename(os.path.normpath(directory))
+        m = re.match(REGEX, cleaned_dir_name)
+
+        if m is None:
+            raise ValueError("Unable to parse directory name %s" % directory)
+
+        self.date = "" # TODO parse group 1
+        self.impl = m.group(2)
+        self.r = int(m.group(3))
+        self.w = int(m.group(4))
+        self.n = int(m.group(5))
+        self.x = int(m.group(6))
+        self.b = int(m.group(7))
+
+        # TODO params
+        # TODO check dir exists and has enough files
+        pass
+
+    def __repr__(self):
+        return ("Experiment(R=%d, W=%d, N=%d, X=%d, B=%d, %s)" % 
+                (self.r, self.w, self.n, self.x, self.b, self.directory))
+
+experiments = [Experiment(d) for d in sys.argv[2:]]
+experiments.sort(key=lambda e: e.r)
+
+print(experiments)
 
 
 # TODO: parse some data
@@ -13,9 +78,6 @@ r_range = np.arange(1, 20 + 1)
 
 # TODO Number of writer threads (constant)
 w = 20
-
-# TODO Doing average or 99%-tile?
-is_avg = True
 
 # Parameters
 BAR_WIDTH = 0.35
