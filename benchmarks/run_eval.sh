@@ -22,7 +22,7 @@ R1=1
 R2=1
 W1=1
 W2=1
-T="olc"
+T=1
 B=1000000000
 N=1000000000
 X=100000
@@ -136,9 +136,9 @@ fi
 sudo cpupower frequency-set -g performance
 
 # Loop through for [R1..R2] and [W1..W2] and start the experiment
-for i in {R1..R2}
+for i in $(seq $R1 $R2)
 do
-    for j in {W1..W2}
+    for j in $(seq $W1 $W2)
     do
 	# Set the directory into which the experiment data will be stored
 	EXPT_TIME=`date '+%Y-%m-%d-%H-%M-%S'`
