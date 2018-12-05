@@ -601,6 +601,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
 
                 // evict/purge if needed
                 ws.touch_no_lock(k, [this](Key kl, Key kh){
+                        assert(false);
                         auto to_purge = hc.get_all(kl, kh);
                         bulk_insert(to_purge);
                         hc.remove(kl, kh);
@@ -762,6 +763,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
                     hc.insert(k, v);
                     node->writeUnlock();
                     ws.touch_no_lock(k, [this](Key kl, Key kh) {
+                            assert(false);
                             auto to_purge = hc.get_all(kl, kh);
                             bulk_insert(to_purge);
                             hc.remove(kl, kh);
@@ -784,17 +786,27 @@ struct BTree : public common::BTreeBase<Key, Value> {
                         max_parent_key = k + leaf->maxEntries;
                     }
 
-                    bool should_hc =
+                    if (ws.is_hot_no_lock(k)) { // check again
+                        hc.insert(k, v);
+                        ws.touch_no_lock(k, [this](Key kl, Key kh) {
+                                assert(false);
+                                auto to_purge = hc.get_all(kl, kh);
+                                bulk_insert(to_purge);
+                                hc.remove(kl, kh);
+                                });
+                    } else {
+                        bool should_hc =
                         ws.touch_no_lock(min_parent_key, max_parent_key, k, [this](Key kl, Key kh) {
                             auto to_purge = hc.get_all(kl, kh);
                             bulk_insert(to_purge);
                             hc.remove(kl, kh);
                             });
-                    // NOTE: race condition: if the range is purged between the
-                    // previous statement and the next one, it will be secretly
-                    // in the HC, which is incorrect.
-                    if (should_hc) {
-                        hc.insert_range(min_parent_key, max_parent_key);
+                        // NOTE: race condition: if the range is purged between the
+                        // previous statement and the next one, it will be secretly
+                        // in the HC, which is incorrect.
+                        if (should_hc) {
+                            hc.insert_range(min_parent_key, max_parent_key);
+                        }
                     }
                 ws.write_unlock();
             }

@@ -103,8 +103,12 @@ typename HC<K, V>::Map HC<K, V>::get_all(K kl, K) {
 }
 
 template <typename K, typename V>
-typename HC<K, V>::Map HC<K, V>::remove(const K& kl, const K& kh) {
-    return hot_cache.remove(kl, kh);
+typename HC<K, V>::Map HC<K, V>::remove(const K& kl, const K&) {
+    // NOTE: we cannot assert that the range is [kl, kh) because it might have
+    // changed since we inserted it.
+    //
+    // TODO: is there a possibility that we need to try both?
+    return hot_cache.remove(kl);
 }
 
 

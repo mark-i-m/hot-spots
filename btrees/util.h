@@ -88,14 +88,25 @@ public:
     // Given a key, find the range it is mapped to.
     maybe::Maybe<T *> find(const K& k);
 
-    // Remove range [kl, kh) from the `RangeMap`. For simplicity and
-    // performance, we assume that the _CALLER_ checks that [kl, kh) is in the
-    // map.
-    T remove(const K& kl, const K& kh);
+    // Remove range containing key k from the `RangeMap`. For simplicity and
+    // performance, we assume that the _CALLER_ checks that such a range is in
+    // the map.
+    T remove(const K& k);
 
     // Returns the number of ranges in the map.
     size_t size() const {
         return ranges.size();
+    }
+
+    // For debugging only! Grabs a read lock.
+    typedef typename std::map<K, std::pair<K, T>>::const_iterator const_iterator;
+
+    const_iterator begin() const {
+        return ranges.begin();
+    }
+
+    const_iterator end() const {
+        return ranges.end();
     }
 };
 
@@ -145,11 +156,10 @@ void RangeMap<K, T>::insert(K kl, K kh, T v) {
 }
 
 template <typename K, typename T>
-T RangeMap<K, T>::remove(const K& kl, const K& kh) {
+T RangeMap<K, T>::remove(const K& k) {
     pthread_rwlock_wrlock(&lock);
-    auto it = ranges.find(kl);
-    assert(it->second.first == kh);
-
+    auto it = ranges.find(k);
+    assert(it != ranges.end());
     T v = it->second.second;
     ranges.erase(it);
     pthread_rwlock_unlock(&lock);

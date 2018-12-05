@@ -48,13 +48,42 @@ class WS {
     void set_mru(size_t i);
 
     // NOTE: Grabs a lock. Beware of deadlock.
-    void print() {
+    void print() const {
         pthread_rwlock_wrlock(&lock);
         for (size_t i = 0; i < N; ++i) {
             std::cout << "[" << low_keys[i] << ", " << high_keys[i] << ") " << counters[i] << std::endl;
         }
         std::cout << std::endl;
         pthread_rwlock_unlock(&lock);
+    }
+
+    // NOTE: debugging. caller should grab lock
+    void sanity_check() const {
+        // Check if full
+        if (lru_map.size() == N) {
+            // None of the counters should be 0
+            for (const auto& c : counters) {
+                assert(c > 0);
+            }
+        }
+
+        // Check the converse
+        auto min = next.load();
+        for (const auto& c : counters) {
+            if (c < min) min = c;
+        }
+        if (min > 0) {
+            assert(lru_map.size() == N);
+        }
+
+        // Check that all ranges are coherent
+        for (const auto& range : lru_map) {
+            const auto low = range.first;
+            const auto high = range.second.first;
+            const auto idx = range.second.second;
+            assert(low == low_keys[idx]);
+            assert(high == high_keys[idx]);
+        }
     }
 
 public:
@@ -143,80 +172,45 @@ WS<K, N>::~WS() {
 }
 
 template <typename K, size_t N>
-void WS<K, N>::touch(const K k, purge_fn) {
+void WS<K, N>::touch(const K k, purge_fn f) {
     pthread_rwlock_rdlock(&lock);
 
-    auto maybe = lru_map.find(k);
-    assert(maybe);
-
-    // Set to MRU
-    set_mru(**maybe);
+    touch_no_lock(k, f);
 
     pthread_rwlock_unlock(&lock);
 }
 
 template <typename K, size_t N>
 void WS<K, N>::touch_no_lock(const K k, purge_fn) {
+
+    sanity_check();
+
     auto maybe = lru_map.find(k);
     assert(maybe);
 
     // Set to MRU
     set_mru(**maybe);
+
+    sanity_check();
 }
 
 template <typename K, size_t N>
 bool WS<K, N>::touch(const K kl, const K kh, const K k, purge_fn f) {
-    assert(kl <= k && k < kh);
-
     pthread_rwlock_wrlock(&lock);
 
-    // Find a free slot and the LRU.
-    size_t lru = 0;
-    size_t lru_counter = (size_t)-1;
-
-    K evicted_low;
-    K evicted_high;
-
-    for (size_t i = 0; i < N; ++i) {
-        auto c = counters[i].load();
-
-        if (c < lru_counter) {
-            lru_counter = c;
-            lru = i;
-        }
-    }
-
-    // lru_counter == 0 => free
-
-    // None free. Need to evict LRU.
-    if (lru_counter > 0) {
-        counters[lru].store(0);
-        evicted_low = low_keys[lru];
-        evicted_high = high_keys[lru];
-        lru_map.remove(evicted_low, evicted_high);
-    }
-
-    // Insert new.
-    low_keys[lru] = kl;
-    high_keys[lru] = kh;
-    lru_map.insert(kl, kh, lru);
-
-    // Make MRU.
-    set_mru(lru);
-
-    if (lru_counter > 0) {
-        f(evicted_low, evicted_high);
-    }
+    auto ret = touch_no_lock(kl, kh, k, f);
 
     pthread_rwlock_unlock(&lock);
 
-    return true;
+    return ret;
 }
 
 template <typename K, size_t N>
 bool WS<K, N>::touch_no_lock(const K kl, const K kh, const K k, purge_fn f) {
     assert(kl <= k && k < kh);
 
+    sanity_check();
+
     // Find a free slot and the LRU.
     size_t lru = 0;
     size_t lru_counter = (size_t)-1;
@@ -237,10 +231,31 @@ bool WS<K, N>::touch_no_lock(const K kl, const K kh, const K k, purge_fn f) {
 
     // None free. Need to evict LRU.
     if (lru_counter > 0) {
+        assert(lru_map.size() == N);
         counters[lru].store(0);
         evicted_low = low_keys[lru];
         evicted_high = high_keys[lru];
-        lru_map.remove(evicted_low, evicted_high);
+        // NOTE: we cannot assert that the range is [kl, kh) because it might have
+        // changed since we inserted it.
+        //
+        // TODO: is there a possibility that we need to try both?
+        lru_map.remove(evicted_low);
+
+        assert(lru_map.size() == (N - 1));
+    }
+
+    sanity_check();
+
+    auto already = lru_map.find(k);
+    if (already) {
+        std::cout<<"duplicate key! " << kl << " " << kh << " " << k << " "
+            << **already << " "
+            << low_keys[**already] << " "
+            << high_keys[**already] << " "
+            << counters[**already] << " "
+            << next << " "
+            << std::endl;
+        assert(false);
     }
 
     // Insert new.
@@ -251,9 +266,13 @@ bool WS<K, N>::touch_no_lock(const K kl, const K kh, const K k, purge_fn f) {
     // Make MRU.
     set_mru(lru);
 
+    sanity_check();
+
     if (lru_counter > 0) {
         f(evicted_low, evicted_high);
     }
+
+    sanity_check();
 
     return true;
 }
