@@ -1,13 +1,23 @@
 #!/bin/bash
 
 ######################################################################
-# Add comments
+#  This script runs experiments based on the following               #
+#  command line arguments                                            #
+#      [R1, R2] : Range over which the read threads are varied       #
+#      [W1, W2] : Range over which the write threads are varied      #
+#      T : Type of the tree                                          #
+#      B : Initial bulk load                                         #
+#      N : Number of operations per thread                           #
+#      X : Number of operations after which each thread reports      #
+#                                                                    #
+#  References:                                                       #
+#      - http://tuxtweaks.com/2014/05/bash-getopts/                  #
 ######################################################################
 
-#Set Script Name variable
+# Set Script Name variable
 SCRIPT=`basename ${BASH_SOURCE[0]}`
 
-#Initialize variables to default values.
+# Initialize variables to default values.
 R1=1
 R2=1
 W1=1
@@ -17,12 +27,12 @@ B=1000000000
 N=1000000000
 X=100000
 
-#Set fonts for Help.
+# Set fonts for Help.
 NORM=`tput sgr0`
 BOLD=`tput bold`
 REV=`tput smso`
 
-#Help function
+# Help function
 function HELP {
   echo -e \\n"Help documentation for ${BOLD}${SCRIPT}.${NORM}"\\n
   echo -e "${REV}Basic usage:${NORM} ${BOLD}$SCRIPT file.ext${NORM}"\\n
@@ -40,7 +50,7 @@ function HELP {
   exit 1
 }
 
-#Check the number of arguments. If none are passed, print help and exit.
+# Check the number of arguments. If none are passed, print help and exit.
 NUMARGS=$#
 echo -e \\n"Number of arguments: $NUMARGS"
 if [ $NUMARGS -eq 0 ]; then
@@ -111,23 +121,31 @@ shift $((OPTIND-1))  #This tells getopts to move on to the next argument.
 echo $R1
 ### End getopts code ###
 
+# Set the project root directory
 PROJECT_ROOT_DIR=$(dirname $(cd `dirname $0` && pwd))
 echo $ROOT_DIR
+# Set the results directory
 RESULTS_DIR="${PROJECT_ROOT_DIR}/results"
+# Create the results directory if it doesn't exist
 if [ ! -d "$RESULTS_DIR" ]
 then
     mkdir $RESULTS_DIR
 fi
 
+# Set the cpu frequency
 sudo cpupower frequency-set -g performance
 
+# Loop through for [R1..R2] and [W1..W2] and start the experiment
 for i in {R1..R2}
 do
     for j in {W1..W2}
     do
+	# Set the directory into which the experiment data will be stored
 	EXPT_TIME=`date '+%Y-%m-%d-%H-%M-%S'`
 	EXPT_DIR="${RESULTS_DIR}/${EXPT_TIME}"
 	mkdir $EXPT_DIR
         ../build/bmk_eval $T $B $i $j $N $X "$EXPT_DIR/" > "${EXPT_DIR}/expt.log"
     done
 done
+
+# End
