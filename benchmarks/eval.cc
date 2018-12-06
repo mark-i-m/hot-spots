@@ -22,7 +22,8 @@
 #include <vector>
 #include <stdio.h>
 #include <unistd.h>
-#include  <fstream>
+#include <fstream>
+#include <mutex>
 
 using namespace std;
 int get_nprocs(void);
@@ -44,6 +45,7 @@ std::atomic_ullong counter = {0};
 std::atomic_ullong cpu = {0};
 std::atomic<bool> ready = {false};
 vector<bool> tready;
+std::mutex m;
 
 unsigned long long int get_counter() { return ++counter; }
 int get_cpu() { return ++cpu; }
@@ -70,7 +72,10 @@ int get_cpu() { return ++cpu; }
 void reader_child(int thread_id, unsigned long long int ops,
                   common::BTreeBase<unsigned long long int, unsigned long long int> *btree, unsigned long long int X, string path) {
     set_cpu(get_cpu());
+    m.lock();
+    cout << thread_id << " has the lock" << endl;
     tready[thread_id] = true;
+    m.unlock();
     // wait till all threads have spawned
     while (!ready.load(std::memory_order_relaxed)) {
     };
@@ -123,7 +128,10 @@ void writer_child(int thread_id, unsigned long long int ops,
                   common::BTreeBase<unsigned long long int, unsigned long long int> *btree, unsigned long long int X, string path) {
     set_cpu(get_cpu());
     
+    m.lock();
+    cout << thread_id << " has the lock" << endl;
     tready[thread_id] = true;
+    m.unlock();
     // wait till all threads have spawned
     while (!ready.load(std::memory_order_relaxed)) {
     }
@@ -166,9 +174,15 @@ void writer_child(int thread_id, unsigned long long int ops,
 }
 
 bool check_all_true(vector<bool> &arr) {
+    m.lock();
     for (size_t i = 0; i < arr.size(); i++) {
-        if (arr[i] == false) return false;
+        if (arr[i] == false) {
+	    cout << "Parent has the lock" << endl; 
+            m.unlock();
+	    return false;
+	}
     }
+    m.unlock();
     return true;
 }
 
