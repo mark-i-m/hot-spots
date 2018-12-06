@@ -194,7 +194,7 @@ plt.bar(r_range + BAR_WIDTH/2, avg_writer_time, BAR_WIDTH, color="#8faab3", hatc
 plt.xlabel('$R$ = Number of Reader Threads')
 plt.xticks(r_range)
 
-plt.ylabel(r'%s Inverse Throughput (cycles/Mops)'
+plt.ylabel(r'%s Time per Million ops (cycles/Mop)'
         % ('Average' if is_avg else '99%-tile'))
 
 plt.title('Reader/Writer Throughput as Number of\nReader Threads $R$ Varies ($W$ = %d Writer Threads)' % w)
