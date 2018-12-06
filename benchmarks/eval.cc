@@ -111,7 +111,7 @@ void reader_child(int thread_id, unsigned long long int ops,
     ofstream myfile;
     string file_name = path+"Read_"+std::to_string(thread_id);
     myfile.open (file_name);
-    for(int i=0; i<r_timer.size(); i++)
+    for(size_t i=0; i<r_timer.size(); i++)
     {
         myfile<<r_timer[i]<<endl;
     }
@@ -156,7 +156,7 @@ void writer_child(int thread_id, unsigned long long int ops,
     ofstream myfile;
     string file_name = path+"Write_"+std::to_string(thread_id);
     myfile.open (file_name);
-    for(int i=0; i<w_timer.size(); i++)
+    for(size_t i=0; i<w_timer.size(); i++)
     {
         myfile<<w_timer[i]<<endl;
     }
@@ -217,10 +217,9 @@ void test(int R, int W, unsigned long long int N, common::BTreeBase<unsigned lon
 
 int main(int argc, char** argv) {
     set_cpu(0);
-    unsigned long long int bulk_load_limit = stoull(argv[1]);
-    cout << "Evaluate which BTree implementation? \n(1) : OLC \n(2) : Hybrid "
-            "\n(3) : ByteReorder\n";
-    int treetype = atoi(argv[0]);
+    unsigned long long int bulk_load_limit = stoull(argv[2]);
+    cout<<argv[1]<<endl<<argv[2]<<endl<<argv[3]<<endl<<argv[4]<<endl<<argv[5]<<argv[6]<<argv[7]<<endl;
+    int treetype = atoi(argv[1]);
     BTreeType type = BTreeType::BTreeOLC;
 
         if (treetype == 1) {
@@ -265,10 +264,10 @@ int main(int argc, char** argv) {
     // R is no. of reader threads, W is number of writer threads, N is number of
     // operations each thread is supposed to do X is the no. of operations after
     // which we measure time taken.
-    int R = atoi(argv[2]);
-    int W = atoi(argv[3]);
-    unsigned long long int N = stoull(argv[4]);
-    unsigned long long int X = stoull(argv[5]);
+    int R = atoi(argv[3]);
+    int W = atoi(argv[4]);
+    unsigned long long int N = stoull(argv[5]);
+    unsigned long long int X = stoull(argv[6]);
     
     tready.resize(R + W);
     for (int i = 0; i < R + W; i++) {
@@ -277,7 +276,7 @@ int main(int argc, char** argv) {
     counter.store(bulk_load_limit, std::memory_order_relaxed);
    // cout<<"This system has processors configured and  processors available.\n"<<get_nprocs_conf()<<" "<< get_nprocs();
     //cout<<numCPU<<endl;
-    string path = argv[6];
+    string path = argv[7];
     test(R, W, N, btree, X, path);
   //  report_average_time(X, N);
     return 0;

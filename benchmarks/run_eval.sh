@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 ######################################################################
 #  This script runs experiments based on the following               #
@@ -144,7 +144,9 @@ do
 	EXPT_TIME=`date '+%Y-%m-%d-%H-%M-%S'`
 	EXPT_DIR="${RESULTS_DIR}/${EXPT_TIME}_r${i}_w${j}_t${T}_b${B}_n${N}_x${X}"
 	sudo mkdir $EXPT_DIR
-        ../build/bmk_eval $T $B $i $j $N $X "$EXPT_DIR/" > "${EXPT_DIR}/expt.log"
+	echo "Starting experiment $EXPT_DIR"
+        sudo su -c "../build/bmk_eval $T $B $i $j $N $X \"$EXPT_DIR/\" > \"${EXPT_DIR}/expt.log\""
+	echo "Experiment $EXPT_DIR ended"
     done
 done
 
