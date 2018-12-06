@@ -85,6 +85,7 @@ class Experiment:
         return ("Experiment(impl=%s, R=%d, W=%d, N=%d, X=%d, B=%d, %s)" %
                 (self.impl, self.r, self.w, self.n, self.x, self.b, self.directory))
 
+    # Computes average cycles per `R` million elements
     def avg_reader_time(self):
         return 10 # TODO
 
