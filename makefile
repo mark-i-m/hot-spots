@@ -65,4 +65,4 @@ bmk.all: $(BMKRUNTARGETS)
 	$<
 
 %.bmk: $(OUTDIR)/bmk_%
-	$<
+	@true
