@@ -183,7 +183,7 @@ void WS<K, N>::touch(const K k, purge_fn f) {
 template <typename K, size_t N>
 void WS<K, N>::touch_no_lock(const K k, purge_fn) {
 
-    sanity_check();
+    //sanity_check();
 
     auto maybe = lru_map.find(k);
     assert(maybe);
@@ -191,7 +191,7 @@ void WS<K, N>::touch_no_lock(const K k, purge_fn) {
     // Set to MRU
     set_mru(**maybe);
 
-    sanity_check();
+    //sanity_check();
 }
 
 template <typename K, size_t N>
@@ -209,7 +209,7 @@ template <typename K, size_t N>
 bool WS<K, N>::touch_no_lock(const K kl, const K kh, const K k, purge_fn f) {
     assert(kl <= k && k < kh);
 
-    sanity_check();
+    //sanity_check();
 
     // Find a free slot and the LRU.
     size_t lru = 0;
@@ -244,19 +244,19 @@ bool WS<K, N>::touch_no_lock(const K kl, const K kh, const K k, purge_fn f) {
         assert(lru_map.size() == (N - 1));
     }
 
-    sanity_check();
+    //sanity_check();
 
-    auto already = lru_map.find(k);
-    if (already) {
-        std::cout<<"duplicate key! " << kl << " " << kh << " " << k << " "
-            << **already << " "
-            << low_keys[**already] << " "
-            << high_keys[**already] << " "
-            << counters[**already] << " "
-            << next << " "
-            << std::endl;
-        assert(false);
-    }
+    //auto already = lru_map.find(k);
+    //if (already) {
+    //    std::cout<<"duplicate key! " << kl << " " << kh << " " << k << " "
+    //        << **already << " "
+    //        << low_keys[**already] << " "
+    //        << high_keys[**already] << " "
+    //        << counters[**already] << " "
+    //        << next << " "
+    //        << std::endl;
+    //    assert(false);
+    //}
 
     // Insert new.
     low_keys[lru] = kl;
@@ -266,13 +266,13 @@ bool WS<K, N>::touch_no_lock(const K kl, const K kh, const K k, purge_fn f) {
     // Make MRU.
     set_mru(lru);
 
-    sanity_check();
+    //sanity_check();
 
     if (lru_counter > 0) {
         f(evicted_low, evicted_high);
     }
 
-    sanity_check();
+    //sanity_check();
 
     return true;
 }

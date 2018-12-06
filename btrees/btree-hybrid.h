@@ -175,11 +175,11 @@ struct BTreeLeaf : public BTreeLeafBase {
         count = 0;
         type = typeMarker;
 
-        // TODO: debugging
-        for (size_t i = 0; i < maxEntries; ++i) {
-            keys[i] = 0xDEADBEEF;
-            payloads[i] = 0xDEADBEEF;
-        }
+        // // debugging
+        // for (size_t i = 0; i < maxEntries; ++i) {
+        //     keys[i] = 0xDEADBEEF;
+        //     payloads[i] = 0xDEADBEEF;
+        // }
     }
 
     // Returns true if this leaf is full. It needs to be split before we can
@@ -250,11 +250,11 @@ struct BTreeLeaf : public BTreeLeafBase {
                sizeof(Payload) * newLeaf->count);
         sep = keys[count - 1];
 
-        // TODO: debugging
-        for (size_t i = count; i < maxEntries; ++i) {
-            keys[i] = 0xDEADBEEF;
-            payloads[i] = 0xDEADBEEF;
-        }
+        // // debugging
+        // for (size_t i = count; i < maxEntries; ++i) {
+        //     keys[i] = 0xDEADBEEF;
+        //     payloads[i] = 0xDEADBEEF;
+        // }
 
         return newLeaf;
     }
@@ -285,10 +285,10 @@ struct BTreeInner : public BTreeInnerBase {
         count = 0;
         type = typeMarker;
 
-        // TODO: debugging
-        for (size_t i = 0; i < maxEntries; ++i) {
-            keys[i] = 0xDEADBEEF;
-        }
+        // // debugging
+        // for (size_t i = 0; i < maxEntries; ++i) {
+        //     keys[i] = 0xDEADBEEF;
+        // }
     }
 
     // Returns true if adding one more key would fill the node.
@@ -336,10 +336,10 @@ struct BTreeInner : public BTreeInnerBase {
         memcpy(newInner->children, children + count + 1,
                sizeof(NodeBase *) * (newInner->count + 1));
 
-        // TODO: debugging
-        for (size_t i = count; i < maxEntries; ++i) {
-            keys[i] = 0xDEADBEEF;
-        }
+        // // debugging
+        // for (size_t i = count; i < maxEntries; ++i) {
+        //     keys[i] = 0xDEADBEEF;
+        // }
 
         return newInner;
     }
