@@ -3,6 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+from datetime import datetime
 import re
 import sys
 import os
@@ -41,6 +42,7 @@ class Experiment:
         self.directory = directory
 
         REGEX = """([0-9-]+)_btree_([a-zA-Z]+)_r([0-9]+)_w([0-9]+)_n([0-9]+)_x([0-9]+)_b([0-9]+)/?"""
+        DATETIMEFMT = """%Y-%m-%d-%H-%M-%S"""
 
         cleaned_dir_name = os.path.basename(os.path.normpath(directory))
         m = re.match(REGEX, cleaned_dir_name)
@@ -48,7 +50,7 @@ class Experiment:
         if m is None:
             raise ValueError("Unable to parse directory name %s" % directory)
 
-        self.date = "" # TODO parse group 1
+        self.date = datetime.strptime(m.group(1), DATETIMEFMT)
         self.impl = m.group(2)
         self.r = int(m.group(3))
         self.w = int(m.group(4))
@@ -56,31 +58,79 @@ class Experiment:
         self.x = int(m.group(6))
         self.b = int(m.group(7))
 
-        # TODO params
-        # TODO check dir exists and has enough files
-        pass
+        # check dir exists
+        if not os.path.exists(directory):
+            raise ValueError("No such directory: %s" % directory)
+
+        # get list of files and make sure there are enough of them
+        files = os.listdir(directory)
+        self.reader_files = []
+        self.writer_files = []
+        for f in files:
+            if str(f)[0] == 'r':
+                self.reader_files.append(f)
+            elif str(f)[0] == 'w':
+                self.writer_files.append(f)
+            else:
+                raise ValueError("Directory contains odd file: %s" % f)
+
+        if len(self.reader_files) != self.r:
+            raise ValueError("Directory has wrong number of reader files. Expected %d, found %d" % (
+                self.r, len(self.reader_files)))
+        if len(self.writer_files) != self.w:
+            raise ValueError("Directory has wrong number of writer files. Expected %d, found %d" % (
+                self.w, len(self.writer_files)))
 
     def __repr__(self):
-        return ("Experiment(R=%d, W=%d, N=%d, X=%d, B=%d, %s)" % 
-                (self.r, self.w, self.n, self.x, self.b, self.directory))
+        return ("Experiment(impl=%s, R=%d, W=%d, N=%d, X=%d, B=%d, %s)" %
+                (self.impl, self.r, self.w, self.n, self.x, self.b, self.directory))
 
 experiments = [Experiment(d) for d in sys.argv[2:]]
 experiments.sort(key=lambda e: e.r)
 
 print(experiments)
 
+# Check that only R varies
+rs = []
+w = None
+x = None
+b = None
+n = None
+
+for e in experiments:
+    if w is None:
+        w = e.w
+    else:
+        if w != e.w:
+            raise ValueError("W varies")
+
+    if x is None:
+        x = e.x
+    else:
+        if x != e.x:
+            raise ValueError("X varies")
+
+    if b is None:
+        b = e.b
+    else:
+        if b != e.b:
+            raise ValueError("B varies")
+
+    if n is None:
+        n = e.n
+    else:
+        if n != e.n:
+            raise ValueError("N varies")
+
+    rs.append(e.r)
 
 # TODO: parse some data
+print(rs)
 
-
-# TODO Number of reader threads
-r_range = np.arange(1, 20 + 1)
-
-# TODO Number of writer threads (constant)
-w = 20
 
 # Parameters
 BAR_WIDTH = 0.35
+r_range = np.arange(min(rs), max(rs)+1)
 
 # For each value of r, average reader/writer time per million ops
 avg_reader_time = [1E6 / r for r in r_range]
