@@ -85,6 +85,18 @@ class Experiment:
         return ("Experiment(impl=%s, R=%d, W=%d, N=%d, X=%d, B=%d, %s)" %
                 (self.impl, self.r, self.w, self.n, self.x, self.b, self.directory))
 
+    def avg_reader_time(self):
+        return 10 # TODO
+
+    def avg_writer_time(self):
+        return 10 # TODO
+
+    def p99_reader_time(self):
+        return 10 # TODO
+
+    def p99_writer_time(self):
+        return 10 # TODO
+
 experiments = [Experiment(d) for d in sys.argv[2:]]
 experiments.sort(key=lambda e: e.r)
 
@@ -124,17 +136,13 @@ for e in experiments:
 
     rs.append(e.r)
 
-# TODO: parse some data
-print(rs)
-
-
 # Parameters
 BAR_WIDTH = 0.35
 r_range = np.arange(min(rs), max(rs)+1)
 
 # For each value of r, average reader/writer time per million ops
-avg_reader_time = [1E6 / r for r in r_range]
-avg_writer_time = [2E6 / r for r in r_range]
+avg_reader_time = [e.avg_reader_time() if is_avg else e.p99_reader_time() for e in experiments]
+avg_writer_time = [e.avg_writer_time() if is_avg else e.p99_writer_time() for e in experiments]
 
 # Plot
 plt.figure(1, figsize=(5, 3.5))
