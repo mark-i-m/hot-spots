@@ -7,6 +7,7 @@ from datetime import datetime
 import re
 import sys
 import os
+import heapq
 
 # Usage: ./script (avg|99) <list of directories that contain data>
 #   avg indicates that we compute avg throughput
@@ -38,6 +39,7 @@ else:
     sys.exit(1)
 
 DISCARD_WARMUP = 10
+MILLION = 1E6
 
 def thread_avg(thread_file, n, x):
     total = 0
@@ -58,7 +60,41 @@ def thread_avg(thread_file, n, x):
 
     return (total, totaln)
 
-MILLION = 1E6
+# returns the slowest 99%-tile of data points (per million ops), including
+# among any in the pre-existing array `p99`.
+#
+# NOTE: `p99` contains a the negated versions of everything.
+def thread_p99(thread_file, p99, n, x):
+    # how many measurements to discard for warmup
+    discard_amt = n * DISCARD_WARMUP / 100 / x
+
+    # how many is the top 99%-tile?
+    p99_size = n / 100
+
+    # python only has a min-heap, but we want a max-heap, so we will negate
+    # everything before putting in the heap and negate again at the end.
+
+    total = 0
+    totaln = 0
+
+    with open(thread_file) as f:
+        for line in f.readlines():
+            # discard warmup period
+            if discard_amt > 0:
+                discard_amt -= 1
+                continue
+
+            # report everything per Mop
+            # FIXME: what if MILLION % x != 0?
+            if totaln < MILLION:
+                total += int(line)
+                totaln += x
+                continue
+
+            if len(p99) < p99_size:
+                heapq.heappush(p99, -total)
+            else:
+                heapq.heappushpop(p99, -total)
 
 def avg_for_threads(threads, n, x):
     per_thread_averages = [thread_avg(t, n, x) for t in threads]
@@ -70,6 +106,14 @@ def avg_for_threads(threads, n, x):
         total += thread_total
         totaln += count
     return total / totaln # per Mop
+
+# see comments on `thread_p99` fn...
+def p99_for_threads(threads, n, x):
+    p99 = []
+    for t in threads:
+        thread_p99(t, p99, n, x)
+
+    return -heapq.nlargest(1, p99)[0]
 
 # parse file names and extract parameters
 #
@@ -133,11 +177,11 @@ class Experiment:
 
     def p99_reader_time(self):
         reader_files = [os.path.join(self.directory, r) for r in self.reader_files]
-        return 10 # TODO
+        return p99_for_threads(reader_files, self.n, self.x)
 
     def p99_writer_time(self):
         writer_files = [os.path.join(self.directory, w) for w in self.writer_files]
-        return 10 # TODO
+        return p99_for_threads(writer_files, self.n, self.x)
 
 experiments = [Experiment(d) for d in sys.argv[2:]]
 experiments.sort(key=lambda e: e.r)
