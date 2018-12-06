@@ -9,7 +9,11 @@ import sys
 import os
 import heapq
 
-# Usage: ./script (avg|99) <list of directories that contain data>
+# Usage: ./script (r|w) (avg|99) <list of directories that contain data>
+#
+#   r indicates that we are varying r
+#   w indicates that we are varying w
+#
 #   avg indicates that we compute avg throughput
 #   99  indicates computing 99%-tile (slowest) throughput
 #
@@ -17,22 +21,35 @@ import heapq
 # the same implementation; only R varies.
 USAGE = """
 Usage: ./script (avg|99) <list of directories that contain data>
+
+  r indicates that we are varying r
+  w indicates that we are varying w
+
   avg indicates that we compute avg throughput
   99  indicates computing 99%-tile (slowest) throughput
 
-All runs should have the same value for W, B, X, N, and should be run with
-the same implementation; only R varies.
+All runs should have the same value for W (or R), B, X, N, and should be run
+with the same implementation; only R (or W) varies.
 
 We always discard the first 10% of data from each thread. This avoids measuring
 any warmup period.
 """
 
-if len(sys.argv) < 3:
+if len(sys.argv) < 4:
     print(USAGE)
     sys.exit(1)
-elif sys.argv[1] == "avg":
+
+if sys.argv[1] == "r":
+    is_r = True
+elif sys.argv[1] == "w":
+    is_r = False
+else:
+    print(USAGE)
+    sys.exit(1)
+
+if sys.argv[2] == "avg":
     is_avg = True
-elif sys.argv[1] == "99":
+elif sys.argv[2] == "99":
     is_avg = False
 else:
     print(USAGE)
@@ -183,24 +200,35 @@ class Experiment:
         writer_files = [os.path.join(self.directory, w) for w in self.writer_files]
         return p99_for_threads(writer_files, self.n, self.x)
 
-experiments = [Experiment(d) for d in sys.argv[2:]]
-experiments.sort(key=lambda e: e.r)
+experiments = [Experiment(d) for d in sys.argv[3:]]
+experiments.sort(key=lambda e: e.r if is_r else e.w)
 
 print(experiments)
 
 # Check that only R varies
-rs = []
-w = None
+if is_r:
+    rs = []
+    w = None
+else:
+    ws = []
+    r = None
 x = None
 b = None
 n = None
 
 for e in experiments:
-    if w is None:
-        w = e.w
+    if is_r:
+        if w is None:
+            w = e.w
+        else:
+            if w != e.w:
+                raise ValueError("W varies")
     else:
-        if w != e.w:
-            raise ValueError("W varies")
+        if r is None:
+            r = e.r
+        else:
+            if r != e.r:
+                raise ValueError("R varies")
 
     if x is None:
         x = e.x
@@ -220,28 +248,35 @@ for e in experiments:
         if n != e.n:
             raise ValueError("N varies")
 
-    rs.append(e.r)
+    if is_r:
+        rs.append(e.r)
+    else:
+        ws.append(e.w)
 
 # Parameters
 BAR_WIDTH = 0.35
-r_range = np.arange(min(rs), max(rs)+1)
+if is_r:
+    dom = np.arange(min(rs), max(rs)+1)
+else:
+    dom = np.arange(min(ws), max(ws)+1)
 
-# For each value of r, average reader/writer time per million ops
+# For each value in dom, average reader/writer time per million ops
 avg_reader_time = [e.avg_reader_time() if is_avg else e.p99_reader_time() for e in experiments]
 avg_writer_time = [e.avg_writer_time() if is_avg else e.p99_writer_time() for e in experiments]
 
 # Plot
 plt.figure(1, figsize=(5, 3.5))
-plt.bar(r_range - BAR_WIDTH/2, avg_reader_time, BAR_WIDTH, color="#dbcccc", hatch=r"""////""", edgecolor="black", label='reader')
-plt.bar(r_range + BAR_WIDTH/2, avg_writer_time, BAR_WIDTH, color="#8faab3", hatch=r"""\\\\""", edgecolor="black", label='writer')
+plt.bar(dom - BAR_WIDTH/2, avg_reader_time, BAR_WIDTH, color="#dbcccc", hatch=r"""////""", edgecolor="black", label='reader')
+plt.bar(dom + BAR_WIDTH/2, avg_writer_time, BAR_WIDTH, color="#8faab3", hatch=r"""\\\\""", edgecolor="black", label='writer')
 
-plt.xlabel('$R$ = Number of Reader Threads')
-plt.xticks(r_range)
+plt.xlabel('$%s$ = Number of %s Threads' % ('R' if is_r else 'W', 'Reader' if is_r else 'Writer'))
+plt.xticks(dom)
 
 plt.ylabel(r'%s Time per Million ops (cycles/Mop)'
         % ('Average' if is_avg else '99%-tile'))
 
-plt.title('Reader/Writer Throughput as Number of\nReader Threads $R$ Varies ($W$ = %d Writer Threads)' % w)
+plt.title('Reader/Writer Throughput as Number of\n%s Threads $%s$ Varies ($%s$ = %d Writer Threads)' %
+        ('Reader' if is_r else 'Writer', 'R' if is_r else 'W', 'W' if is_r else 'R',w if is_r else r))
 
 plt.legend()
 plt.tight_layout()
