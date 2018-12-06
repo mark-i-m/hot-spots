@@ -21,6 +21,9 @@ Usage: ./script (avg|99) <list of directories that contain data>
 
 All runs should have the same value for W, B, X, N, and should be run with
 the same implementation; only R varies.
+
+We always discard the first 10% of data from each thread. This avoids measuring
+any warmup period.
 """
 
 if len(sys.argv) < 3:
@@ -33,6 +36,40 @@ elif sys.argv[1] == "99":
 else:
     print(USAGE)
     sys.exit(1)
+
+DISCARD_WARMUP = 10
+
+def thread_avg(thread_file, n, x):
+    total = 0
+    totaln = 0
+
+    # how many measurements to discard for warmup
+    discard_amt = n * DISCARD_WARMUP / 100 / x
+
+    with open(thread_file) as f:
+        for line in f.readlines():
+            # discard warmup period
+            if discard_amt > 0:
+                discard_amt -= 1
+                continue
+
+            total += int(line)
+            totaln += x
+
+    return (total, totaln)
+
+MILLION = 1E6
+
+def avg_for_threads(threads, n, x):
+    per_thread_averages = [thread_avg(t, n, x) for t in threads]
+    print(per_thread_averages)
+    total = 0
+    totaln = 0
+    for thread_total, count in per_thread_averages:
+        count = float(count) / MILLION
+        total += thread_total
+        totaln += count
+    return total / totaln # per Mop
 
 # parse file names and extract parameters
 #
@@ -87,15 +124,19 @@ class Experiment:
 
     # Computes average cycles per `R` million elements
     def avg_reader_time(self):
-        return 10 # TODO
+        reader_files = [os.path.join(self.directory, r) for r in self.reader_files]
+        return avg_for_threads(reader_files, self.n, self.x) / self.r
 
     def avg_writer_time(self):
-        return 10 # TODO
+        writer_files = [os.path.join(self.directory, w) for w in self.writer_files]
+        return avg_for_threads(writer_files, self.n, self.x) / self.w
 
     def p99_reader_time(self):
+        reader_files = [os.path.join(self.directory, r) for r in self.reader_files]
         return 10 # TODO
 
     def p99_writer_time(self):
+        writer_files = [os.path.join(self.directory, w) for w in self.writer_files]
         return 10 # TODO
 
 experiments = [Experiment(d) for d in sys.argv[2:]]
@@ -153,7 +194,7 @@ plt.bar(r_range + BAR_WIDTH/2, avg_writer_time, BAR_WIDTH, color="#8faab3", hatc
 plt.xlabel('$R$ = Number of Reader Threads')
 plt.xticks(r_range)
 
-plt.ylabel(r'%s Throughput (seconds/$R$ Mops)'
+plt.ylabel(r'%s Inverse Throughput (cycles/Mops)'
         % ('Average' if is_avg else '99%-tile'))
 
 plt.title('Reader/Writer Throughput as Number of\nReader Threads $R$ Varies ($W$ = %d Writer Threads)' % w)
