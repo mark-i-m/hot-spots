@@ -73,7 +73,7 @@ void reader_child(int thread_id, unsigned long long int ops,
                   common::BTreeBase<unsigned long long int, unsigned long long int> *btree, unsigned long long int X, string path) {
     set_cpu(get_cpu());
     m.lock();
-    cout << thread_id << " has the lock" << endl;
+    //cout << thread_id << " has the lock" << endl;
     tready[thread_id] = true;
     m.unlock();
     // wait till all threads have spawned
@@ -95,12 +95,12 @@ void reader_child(int thread_id, unsigned long long int ops,
         // generate a random number of uint_64 to read
         read_value = distr(eng);
         // the number can only be as big as the counter
-        cout << "random is : " << read_value << endl;
+        //cout << "random is : " << read_value << endl;
         read_value = read_value % (counter.load(std::memory_order_relaxed));
         std::pair<unsigned long long int, unsigned long long int> read;
         read.first = read_value;
         read.second = 0;
-        cout << "Thread " << thread_id << " reading Key " << read_value << endl;
+        //cout << "Thread " << thread_id << " reading Key " << read_value << endl;
         uint64_t tick = rdtsc();
         btree->lookup(read.first, read.second);
         time_x += rdtsc() - tick;
@@ -111,7 +111,7 @@ void reader_child(int thread_id, unsigned long long int ops,
             x = 0;
             time_x = 0;
         }
-        cout << "Value read is " << read.second << endl;
+        //cout << "Value read is " << read.second << endl;
     }
     ofstream myfile;
     string file_name = path+"Read_"+std::to_string(thread_id);
@@ -129,7 +129,7 @@ void writer_child(int thread_id, unsigned long long int ops,
     set_cpu(get_cpu());
     
     m.lock();
-    cout << thread_id << " has the lock" << endl;
+    //cout << thread_id << " has the lock" << endl;
     tready[thread_id] = true;
     m.unlock();
     // wait till all threads have spawned
@@ -148,12 +148,13 @@ void writer_child(int thread_id, unsigned long long int ops,
         write_value = get_counter();
         write.first = write_value;
         write.second = rand();
-        cout << "Thread " << thread_id << " writing " << write.first << " "
-             << write.second << endl;
+        //cout << "Thread " << thread_id << " writing " << write.first << " "
+        //     << write.second << endl;
         uint64_t tick = rdtsc();
         btree->insert(write);
         time_x += rdtsc() - tick;
-        ops--;
+        x++;
+	ops--;
         if (x == X || ops == 0) {
             w_timer.push_back(time_x);
             x = 0;
@@ -177,7 +178,7 @@ bool check_all_true(vector<bool> &arr) {
     m.lock();
     for (size_t i = 0; i < arr.size(); i++) {
         if (arr[i] == false) {
-	    cout << "Parent has the lock" << endl; 
+	    //cout << "Parent has the lock" << endl; 
             m.unlock();
 	    return false;
 	}
@@ -216,9 +217,9 @@ void test(int R, int W, unsigned long long int N, common::BTreeBase<unsigned lon
         std::thread writers[W];
         for (int i = 0; i < W; i++)
             writers[i] = std::thread(writer_child, i + R, N, btree, X, path);
-        cout << "Checking if ready" << ready << endl;
+        //cout << "Checking if ready" << ready << endl;
         while (!check_all_true(tready)) {
-            cout << "Wait" << endl;
+            //cout << "Wait" << endl;
         }
         cout << "Now ready to go" << endl;
         ready = true;
@@ -232,7 +233,7 @@ void test(int R, int W, unsigned long long int N, common::BTreeBase<unsigned lon
 int main(int argc, char** argv) {
     set_cpu(0);
     unsigned long long int bulk_load_limit = stoull(argv[2]);
-    cout<<argv[1]<<endl<<argv[2]<<endl<<argv[3]<<endl<<argv[4]<<endl<<argv[5]<<argv[6]<<argv[7]<<endl;
+    //cout<<argv[1]<<endl<<argv[2]<<endl<<argv[3]<<endl<<argv[4]<<endl<<argv[5]<<argv[6]<<argv[7]<<endl;
     int treetype = atoi(argv[1]);
     BTreeType type = BTreeType::BTreeOLC;
 
@@ -272,7 +273,8 @@ int main(int argc, char** argv) {
     while (insert <= bulk_load_limit) {
         int value = rand();
         btree->insert(std::pair<unsigned long long int, unsigned long long int>(insert, value));
-        cout << "Key : " << insert << " Value : " << value << endl;
+        if (insert%10000000==0)
+		cout << "Key : " << insert << " Value : " << value << endl;
         insert++;
     }
     // R is no. of reader threads, W is number of writer threads, N is number of
