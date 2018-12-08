@@ -155,11 +155,11 @@ class Experiment:
         self.w = int(m.group(3))
         impl = int(m.group(4))
         if impl == 1:
-            self.impl = "olc"
+            self.impl = "OLC"
         elif impl == 2:
-            self.impl = "hybrid"
+            self.impl = "Hybrid"
         elif impl == 3:
-            self.impl = "rb"
+            self.impl = "Byte-reordering"
         else:
             raise ValueError("Invalid btree type %s" % impl)
         self.b = int(m.group(5))
@@ -227,6 +227,7 @@ else:
 x = None
 b = None
 n = None
+impl = None
 
 for e in experiments:
     if is_r:
@@ -260,6 +261,12 @@ for e in experiments:
         if n != e.n:
             raise ValueError("N varies")
 
+    if impl is None:
+        impl = e.impl
+    else:
+        if impl != e.impl:
+            raise ValueError("impl varies")
+
     if is_r:
         rs.append(e.r)
     else:
@@ -276,6 +283,12 @@ else:
 avg_reader_time = [e.avg_reader_time() if is_avg else e.p99_reader_time() for e in experiments]
 avg_writer_time = [e.avg_writer_time() if is_avg else e.p99_writer_time() for e in experiments]
 
+# Scale everything down by a factor of 1M cycles and convert to normal throughput
+FREQ = 3500. # MHz
+print("Assuming processor frequency %s MHz" % FREQ)
+avg_reader_time = [(1E6 / r) * FREQ for r in avg_reader_time]
+avg_writer_time = [(1E6 / w) * FREQ for w in avg_writer_time]
+
 # Plot
 plt.figure(1, figsize=(5, 3.5))
 plt.bar(dom - BAR_WIDTH/2, avg_reader_time, BAR_WIDTH, color="#dbcccc", hatch=r"""////""", edgecolor="black", label='reader')
@@ -284,11 +297,13 @@ plt.bar(dom + BAR_WIDTH/2, avg_writer_time, BAR_WIDTH, color="#8faab3", hatch=r"
 plt.xlabel('$%s$ = Number of %s Threads' % ('R' if is_r else 'W', 'Reader' if is_r else 'Writer'))
 plt.xticks(dom)
 
-plt.ylabel(r'%s Time per Million ops (cycles/Mop)'
+plt.ylabel(r'%s Throughput (Mops/s)'
         % ('Average' if is_avg else '99%-tile'))
+#plt.ylabel(r'%s Time per Million ops (cycles/op)'
+#        % ('Average' if is_avg else '99%-tile'))
 
-plt.title('Reader/Writer Throughput as Number of\n%s Threads $%s$ Varies ($%s$ = %d Writer Threads)' %
-        ('Reader' if is_r else 'Writer', 'R' if is_r else 'W', 'W' if is_r else 'R',w if is_r else r))
+plt.title('%s B-tree Reader/Writer Throughput as Number of\n%s Threads $%s$ Varies ($%s$ = %d Writer Threads)' %
+        (impl, 'Reader' if is_r else 'Writer', 'R' if is_r else 'W', 'W' if is_r else 'R',w if is_r else r))
 
 plt.legend()
 plt.tight_layout()
