@@ -103,6 +103,7 @@ def thread_p99(thread_file, p99, n, x):
 
             # report everything per Mop
             # FIXME: what if MILLION % x != 0?
+            # FIXME: what if n % x != 0?
             if totaln < MILLION:
                 total += int(line)
                 totaln += x
@@ -139,7 +140,8 @@ class Experiment:
     def __init__(self, directory):
         self.directory = directory
 
-        REGEX = """([0-9-]+)_btree_([a-zA-Z]+)_r([0-9]+)_w([0-9]+)_n([0-9]+)_x([0-9]+)_b([0-9]+)/?"""
+        #               1         2        3         4       5          6          7
+        REGEX = """([0-9-]+)_r([0-9]+)_w([0-9]+)_t([1-3])_b([0-9]+)_n([0-9]+)_x([0-9]+)/?"""
         DATETIMEFMT = """%Y-%m-%d-%H-%M-%S"""
 
         cleaned_dir_name = os.path.basename(os.path.normpath(directory))
@@ -149,12 +151,20 @@ class Experiment:
             raise ValueError("Unable to parse directory name %s" % directory)
 
         self.date = datetime.strptime(m.group(1), DATETIMEFMT)
-        self.impl = m.group(2)
-        self.r = int(m.group(3))
-        self.w = int(m.group(4))
-        self.n = int(m.group(5))
-        self.x = int(m.group(6))
-        self.b = int(m.group(7))
+        self.r = int(m.group(2))
+        self.w = int(m.group(3))
+        impl = int(m.group(4))
+        if impl == 1:
+            self.impl = "olc"
+        elif impl == 2:
+            self.impl = "hybrid"
+        elif impl == 3:
+            self.impl = "rb"
+        else:
+            raise ValueError("Invalid btree type %s" % impl)
+        self.b = int(m.group(5))
+        self.n = int(m.group(6))
+        self.x = int(m.group(7))
 
         # check dir exists
         if not os.path.exists(directory):
@@ -165,10 +175,12 @@ class Experiment:
         self.reader_files = []
         self.writer_files = []
         for f in files:
-            if str(f)[0] == 'r':
+            if str(f)[0] == 'R':
                 self.reader_files.append(f)
-            elif str(f)[0] == 'w':
+            elif str(f)[0] == 'W':
                 self.writer_files.append(f)
+            elif str(f) == "expt.log":
+                pass # skip the log
             else:
                 raise ValueError("Directory contains odd file: %s" % f)
 
