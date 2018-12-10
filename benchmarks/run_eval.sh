@@ -151,3 +151,5 @@ do
 done
 
 # End
+
+sudo chown -R `whoami` ${RESULTS_DIR}
