@@ -298,14 +298,21 @@ plt.xlabel('$%s$ = Number of %s Threads' % ('R' if is_r else 'W', 'Reader' if is
 plt.xticks(dom)
 
 plt.ylabel(r'%s Throughput (Mops/s)'
-        % ('Average' if is_avg else '99%-tile'))
+        % ('Average' if is_avg else '99%-tile (Worst)'))
 #plt.ylabel(r'%s Time per Million ops (cycles/op)'
 #        % ('Average' if is_avg else '99%-tile'))
 
 plt.title('%s B-tree Reader/Writer Throughput as Number of\n%s Threads $%s$ Varies ($%s$ = %d Writer Threads)' %
         (impl, 'Reader' if is_r else 'Writer', 'R' if is_r else 'W', 'W' if is_r else 'R',w if is_r else r))
 
+def find_file_name():
+    i = 0
+    while os.path.isfile("/tmp/figure%d.png" % i):
+        i += 1
+
+    return "/tmp/figure%d.png" % i
+
 plt.legend()
 plt.tight_layout()
-plt.savefig("/tmp/figure.png", bbox_inches="tight")
+plt.savefig(find_file_name(), bbox_inches="tight")
 plt.show()
