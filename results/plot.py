@@ -302,8 +302,8 @@ plt.ylabel(r'%s Throughput (Mops/s)'
 #plt.ylabel(r'%s Time per Million ops (cycles/op)'
 #        % ('Average' if is_avg else '99%-tile'))
 
-plt.title('%s B-tree Reader/Writer Throughput as Number of\n%s Threads $%s$ Varies ($%s$ = %d Writer Threads)' %
-        (impl, 'Reader' if is_r else 'Writer', 'R' if is_r else 'W', 'W' if is_r else 'R',w if is_r else r))
+plt.title('%s B-tree Reader/Writer Throughput as Number of\n%s Threads $%s$ Varies ($%s$ = %d %s Threads)' %
+        (impl, 'Reader' if is_r else 'Writer', 'R' if is_r else 'W', 'W' if is_r else 'R',w if is_r else r, 'Writer' if is_r else 'Reader'))
 
 def find_file_name():
     i = 0
