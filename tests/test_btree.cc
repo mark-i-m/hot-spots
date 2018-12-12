@@ -224,6 +224,8 @@ void test_insert_read_concurrent_contend(common::BTreeBase<Key, Value> *btree) {
 
     // Data and routine for all threads.
     auto f = [btree]() {
+        int nmising = 0;
+
         for (int i = 0; i < TEST_SIZE; ++i) {
             Key key = k + (i % 4000);
             btree->insert(key, v);
@@ -231,9 +233,15 @@ void test_insert_read_concurrent_contend(common::BTreeBase<Key, Value> *btree) {
             Value foundv;
             bool found = btree->lookup(key, foundv);
 
-            assert(found);
-            assert(v == foundv);
+            if (found) {
+                assert(v == foundv);
+            } else {
+                std::cout << "missing key " << key << std::endl;
+                nmising++;
+            }
         }
+
+        std::cout << "Total missing: " << nmising << std::endl;
     };
 
     // Start threads.

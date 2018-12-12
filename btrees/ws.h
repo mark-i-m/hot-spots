@@ -209,6 +209,67 @@ template <typename K, size_t N>
 bool WS<K, N>::touch_no_lock(const K kl, const K kh, const K k, purge_fn f) {
     assert(kl <= k && k < kh);
 
+    // maybe need to expand existing range
+    auto maybe_kl = lru_map.find(kl);
+    auto maybe_kh = lru_map.find(kh);
+
+    // TODO: assumes that there is not a range completely inside [kl, kh)
+    if (maybe_kl && maybe_kh) {
+        if (**maybe_kl != **maybe_kh) {
+            // TODO: overlaps with two existing ranges
+            return false;
+        } else {
+            // TODO: just touch
+            return false;
+        }
+    } else if (maybe_kl) {
+        //std::cout
+        //    << "low kl "
+        //    << low_keys[**maybe_kl]
+        //    << ", kh "
+        //    << high_keys[**maybe_kl]
+        //    << " diff "
+        //    <<  (high_keys[**maybe_kl] - low_keys[**maybe_kl])
+        //    << " tried "
+        //    << kl
+        //    << " "
+        //    << kh
+        //    << " diff "
+        //    <<  (kh - kl)
+        //    << std::endl;
+
+        // expand high
+        //size_t idx = **maybe_kl;
+        //K low = low_keys[idx];
+        //high_keys[idx] = kh;
+        //lru_map.remove(kl);
+        //lru_map.insert(low, kl, idx);
+        return false; // TODO: would need to update range in hot cache
+    } else if (maybe_kh) {
+        //std::cout
+        //    << "low kl "
+        //    << low_keys[**maybe_kh]
+        //    << ", kh "
+        //    << high_keys[**maybe_kh]
+        //    << " diff "
+        //    <<  (high_keys[**maybe_kh] - low_keys[**maybe_kh])
+        //    << " tried "
+        //    << kl
+        //    << " "
+        //    << kh
+        //    << " diff "
+        //    <<  (kh - kl)
+        //    << std::endl;
+
+        // expand low
+    //    size_t idx = **maybe_kh;
+    //    K high = high_keys[idx];
+    //    low_keys[idx] = kl;
+    //    lru_map.remove(kh);
+    //    lru_map.insert(kl, high, idx);
+        return false; // TODO: would need to update range in hot cache
+    }
+
     //sanity_check();
 
     // Find a free slot and the LRU.

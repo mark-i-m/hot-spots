@@ -11,9 +11,11 @@ using Key = uint64_t;
 
 void test_simple();
 void test_simple_concurrent();
+void test_simple_concurrent_small();
 
 int main() {
     test_simple();
+    test_simple_concurrent_small();
     test_simple_concurrent();
 
     std::cout << "SUCCESS :)" << std::endl;
@@ -79,6 +81,39 @@ void test_simple() {
 
 void test_simple_concurrent() {
     std::cout << "test_simple_concurrent" << std::endl;
+
+    constexpr int TEST_SIZE = 1000000;
+    constexpr int N_THREADS = 10;
+
+    btree_hybrid::WS<Key, N_THREADS> ws;
+
+    // Data and routine for all threads.
+    auto f = [&ws](int tno) {
+        ws.touch(tno * 10, tno * 10 + 10, tno * 10 + 4, [](Key, Key){
+                assert(false);
+                });
+
+        for (int i = 0; i < TEST_SIZE; ++i) {
+            ws.touch(tno * 10 + (i % 10), [](Key, Key){
+                    assert(false);
+                    });
+        }
+    };
+
+    // Start threads.
+    std::vector<std::thread> threads;
+    for (int i = 0; i < N_THREADS; ++i) {
+        threads.push_back(std::thread(f, i));
+    }
+
+    // Wait for threads to complete
+    for (auto& thread : threads) {
+        thread.join();
+    }
+}
+
+void test_simple_concurrent_small() {
+    std::cout << "test_simple_concurrent_small" << std::endl;
 
     constexpr int TEST_SIZE = 1000000;
     constexpr int N_THREADS = 10;
