@@ -11,6 +11,7 @@ flags = [
 '-I', 'btrees',
 '-I', 'tests',
 '-I', 'benchmarks',
+'-I', 'btrees/libcuckoo',
 ]
 
 

@@ -1,4 +1,5 @@
 #ifndef _BTREE_HC_H_
+
 #define _BTREE_HC_H_
 
 // TODO: finer-grained locking
@@ -7,13 +8,14 @@
 #include <unordered_map>
 #include <pthread.h>
 #include <functional>
+#include "libcuckoo/cuckoohash_map.hh"
 
 namespace btree_hybrid {
 
 template <typename K, typename V>
 struct HC {
     // Creating a `Map` type from Keys to Values
-    typedef std::unordered_map<K, V> Map;
+    typedef cuckoohash_map<K, V> Map;
     // Lock
     mutable pthread_rwlock_t lock;
 
@@ -73,7 +75,7 @@ HC<K, V>::~HC() {
 
 template <typename K, typename V>
 void HC<K, V>::insert(K k, V v) {
-    pthread_rwlock_wrlock(&lock);
+    pthread_rwlock_rdlock(&lock);
     auto maybe = hot_cache.find(k);
     assert(maybe);
     (*maybe)->insert({k, v});
@@ -89,12 +91,12 @@ void HC<K, V>::insert(K kl, K kh, K k, V v) {
     // If the range is not in the RangeMap, insert it along with the given Key and Value
     if (!maybe) {
         Map m;
-        m.insert({k, v});
+        m.insert(k, v);
         hot_cache.insert(kl, kh, m);
     }
     // Otherwise, insert directly
     else {
-        (*maybe)->insert({k, v});
+        (*maybe)->insert(k, v);
     }
     pthread_rwlock_unlock(&lock);
 }
@@ -135,12 +137,12 @@ util::maybe::Maybe<V> HC<K, V>::find(const K& k) {
         pthread_rwlock_unlock(&lock);
         return util::maybe::Maybe<V>();
     } else {
-        auto it = (*maybe)->find(k);
-        if(it != (*maybe)->end()) {
+        V v;
+        if ((*maybe)->find(k, v)) {
             // We used to return a pointer here, but the pointer could be
             // invalidated later if the element is evicted, so instead, we just
             // return a copy.
-            auto maybe = util::maybe::Maybe<V>(it->second);
+            auto maybe = util::maybe::Maybe<V>(v);
             pthread_rwlock_unlock(&lock);
             return maybe;
         } else {
