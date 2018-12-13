@@ -6,9 +6,10 @@
 #include <iostream>
 #include <cstdlib>
 #include <unordered_map>
-#include <pthread.h>
+//#include <pthread.h>
 #include <atomic>
 #include <functional>
+#include <mutex>
 
 namespace btree_hybrid {
 
@@ -40,13 +41,16 @@ class WS {
     // LOCKING RULES
     // - You must grab a lock to read or write the `lru_map` or `counters`.
     // - You must grab a _write_ lock to insert or evict a range.
-    mutable pthread_rwlock_t lock;
+    //mutable pthread_rwlock_t lock;
+
+    mutable std::mutex lock;
 
     // Set range i to the MRU if it is still in the map.
     //
     // NOTE: caller should already be holding the lock.
     void set_mru(size_t i);
 
+    /*
     // NOTE: Grabs a lock. Beware of deadlock.
     void print() const {
         pthread_rwlock_wrlock(&lock);
@@ -85,14 +89,18 @@ class WS {
             assert(high == high_keys[idx]);
         }
     }
+    */
+
+    bool weird_overlaps(K kl, K kh);
 
 public:
 
-    typedef std::function<void(K, K)> purge_fn;
+    //typedef std::function<void(K, K)> purge_fn;
 
     // Construct a WS with at most `N` pages.
     WS();
 
+    /*
     ~WS();
 
     // Update stats by registering a touch for key `k`. If a range should be
@@ -136,6 +144,12 @@ public:
     // Returns true iff the given key k is in a range in the WS.
     bool is_hot(const K& k);
     bool is_hot_no_lock(const K& k);
+    */
+
+    bool touch(const K& kl, const K& kh, const K& k);
+    void remove(const K& kl, const K& kh);
+    bool needs_purge() const;
+    std::pair<K, K> purge_range() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -161,16 +175,113 @@ WS<K, N>::WS() {
     next = 1;
     std::fill(counters, &counters[N], 0);
 
-    int ret = pthread_rwlock_init(&lock, NULL);
-    assert(ret == 0);
+    //int ret = pthread_rwlock_init(&lock, NULL);
+    //assert(ret == 0);
+}
+
+//template <typename K, size_t N>
+//WS<K, N>::~WS() {
+//    int ret = pthread_rwlock_destroy(&lock);
+//    assert(ret == 0);
+//}
+
+template <typename K, size_t N>
+bool WS<K, N>::weird_overlaps(K kl, K kh) {
+    const auto maybe_low = lru_map.find(kl);
+    const auto maybe_high = lru_map.find(kh);
+    return maybe_low || maybe_high;
 }
 
 template <typename K, size_t N>
-WS<K, N>::~WS() {
-    int ret = pthread_rwlock_destroy(&lock);
-    assert(ret == 0);
+bool WS<K, N>::touch(const K& kl, const K& kh, const K& k) {
+    auto maybe = lru_map.find(k);
+    if (maybe) {
+        set_mru(**maybe);
+        return true;
+    } else {
+        lock.lock();
+        if (lru_map.size() == N) { // full
+            lock.unlock();
+            return false;
+        }
+        if (weird_overlaps(kl, kh)) {
+            lock.unlock();
+            return false;
+        }
+
+        // Insert
+
+        // Find a free slot and the LRU.
+        size_t lru = 0;
+        size_t lru_counter = (size_t)-1;
+
+        for (size_t i = 0; i < N; ++i) {
+            auto c = counters[i].load();
+
+            if (c < lru_counter) {
+                lru_counter = c;
+                lru = i;
+            }
+        }
+
+        assert(lru_counter == 0);
+
+        low_keys[lru] = kl;
+        high_keys[lru] = kh;
+        lru_map.insert(kl, kh, lru);
+
+        // Make MRU.
+        set_mru(lru);
+
+        lock.unlock();
+        return true;
+    }
 }
 
+template <typename K, size_t N>
+void WS<K, N>::remove(const K& kl, const K&) {
+    // NOTE: no lock needed because this can only be called while holding the big_lock(w)
+    const auto idx = lru_map.remove(kl);
+    counters[idx] = 0;
+    low_keys[idx] = 0xDEADBEEF;
+    high_keys[idx] = 0xDEADBEEF;
+}
+
+template <typename K, size_t N>
+bool WS<K, N>::needs_purge() const {
+    return lru_map.size() == N;
+}
+
+template <typename K, size_t N>
+std::pair<K, K> WS<K, N>::purge_range() const {
+    // NOTE: no lock needed because this can only be called while holding the big_lock(w)
+
+    // Find a free slot and the LRU.
+    size_t lru = 0;
+    size_t lru_counter = (size_t)-1;
+
+    K evicted_low;
+    K evicted_high;
+
+    for (size_t i = 0; i < N; ++i) {
+        auto c = counters[i].load();
+
+        if (c < lru_counter) {
+            lru_counter = c;
+            lru = i;
+        }
+    }
+
+    assert(lru_counter > 0);
+    assert(lru_map.size() == N);
+
+    evicted_low = low_keys[lru];
+    evicted_high = high_keys[lru];
+
+    return {evicted_low, evicted_high};
+}
+
+/*
 template <typename K, size_t N>
 void WS<K, N>::touch(const K k, purge_fn f) {
     pthread_rwlock_rdlock(&lock);
@@ -291,6 +402,7 @@ bool WS<K, N>::is_hot_no_lock(const K& k) {
     auto maybe = lru_map.find(k);
     return maybe;
 }
+*/
 
 } // namespace btree_hybrid
 

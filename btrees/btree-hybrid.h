@@ -15,9 +15,9 @@
 
 #include "btree-base.h"
 #include "ws.h"
-#include "hc.h"
 #include "util.h"
 
+#include <libcuckoo/cuckoohash_map.hh>
 #include <algorithm>
 #include <immintrin.h>
 #include <sched.h>
@@ -25,6 +25,7 @@
 #include <cassert>
 #include <cstring>
 #include <vector>
+#include <pthread.h>
 
 namespace btree_hybrid {
 // Each page in the Btree can be either an inner node or a leaf node.
@@ -366,10 +367,22 @@ struct BTree : public common::BTreeBase<Key, Value> {
     std::atomic<NodeBase *> root;
 
     WS<Key, WSSize> ws;
-    HC<Key, Value> hc;
+    cuckoohash_map<Key, Value> hc;
+
+    mutable pthread_rwlock_t big_lock;
 
     // Construct a new btree with exactly one node, which is an empty leaf node.
-    BTree() { root = new BTreeLeaf<Key, Value>(); }
+    BTree() {
+        root = new BTreeLeaf<Key, Value>();
+
+        int ret = pthread_rwlock_init(&big_lock, NULL);
+        assert(ret == 0);
+    }
+
+    ~BTree() {
+        int ret = pthread_rwlock_destroy(&big_lock);
+        assert(ret == 0);
+    }
 
     // Create a new root node with the two given nodes as children separated by
     // the given key. Atomically replace the current root with the new one.
@@ -510,13 +523,12 @@ struct BTree : public common::BTreeBase<Key, Value> {
         }
     }
 
-    void bulk_insert(typename HC<Key, Value>::Map m) {
-        if (m.empty()) {
+    void bulk_insert(std::vector<std::pair<Key, Value>> key_values) {
+        if (key_values.empty()) {
             return;
         }
 
         // sorted list of key/value pairs
-        std::vector<std::pair<Key, Value>> key_values(m.begin(), m.end());
         std::sort(key_values.begin(), key_values.end());
 
         // insertions
@@ -580,41 +592,28 @@ struct BTree : public common::BTreeBase<Key, Value> {
         }
     }
 
+    void big_read_lock() const {
+        pthread_rwlock_rdlock(&big_lock);
+    }
+
+    void big_write_lock() const {
+        pthread_rwlock_wrlock(&big_lock);
+    }
+
+    void big_unlock() const {
+        pthread_rwlock_unlock(&big_lock);
+    }
+
     void insert(Key k, Value v) {
         insert_inner(k, v, false);
     }
 
     // Insert the (k, v) pair into the tree.
     void insert_inner(Key k, Value v, bool in_bulk_insert) {
-        // Purge routine
-        auto purge_fn = [this](Key kl, Key kh){
-            hc.purge(kl, kh, [this](typename HC<Key, Value>::Map to_purge) {
-                        bulk_insert(to_purge);
-                    });
-        };
-
         int restartCount = 0;
     restart:
         if (restartCount++) yield(restartCount);
         bool needRestart = false;
-
-        // First, attempt to check the hotcache.
-        if (!in_bulk_insert) {
-            ws.read_lock();
-
-            if (ws.is_hot_no_lock(k)) {
-                // insert
-                hc.insert(k, v);
-
-                // evict/purge if needed
-                ws.touch_no_lock(k, purge_fn);
-
-                ws.read_unlock();
-                return;
-            }
-
-            ws.read_unlock();
-        }
 
         // Current node
         NodeBase *node = root;
@@ -739,6 +738,83 @@ struct BTree : public common::BTreeBase<Key, Value> {
             if (parent) parent->writeUnlock();
             goto restart;
         } else {
+            if (!is_root && !in_bulk_insert) {
+                if (k < min_parent_key) {
+                    min_parent_key = k - leaf->maxEntries;
+                    max_parent_key = k + 1;
+                } else if (k >= max_parent_key) {
+                    min_parent_key = k;
+                    max_parent_key = k + leaf->maxEntries;
+                }
+
+                big_read_lock();
+                if (ws.needs_purge()) {
+                    big_unlock();
+                    big_write_lock();
+                    if (ws.needs_purge()) {
+                        Key purge_low, purge_high;
+                        std::tie(purge_low, purge_high) = ws.purge_range();
+                        std::vector<std::pair<Key, Value>> key_values;
+                        auto locked_hc = hc.lock_table();
+                        for (auto it : locked_hc) {
+                            if (it.first >= purge_low && it.first < purge_high) {
+                                key_values.push_back(it);
+                            }
+                        }
+                        bulk_insert(key_values);
+                        ws.remove(purge_low, purge_high);
+                        for (auto it : key_values) {
+                            hc.erase(it.first);
+                        }
+                    }
+                    big_unlock();
+                    goto restart;
+                } else {
+                    if (ws.touch(min_parent_key, max_parent_key, k)) { // if is hot
+                        hc.insert(k, v);
+                        big_unlock();
+                        return;
+                    } else {
+                        big_unlock();
+
+                        // only lock leaf node
+                        node->upgradeToWriteLockOrRestart(versionNode, needRestart);
+                        if (needRestart) goto restart;
+                        if (parent) {
+                            parent->readUnlockOrRestart(versionParent, needRestart);
+                            if (needRestart) {
+                                node->writeUnlock();
+                                goto restart;
+                            }
+                        }
+
+                        leaf->insert(k, v);
+                        node->writeUnlock();
+                        return;
+                    }
+                }
+            } else {
+                // only lock leaf node
+                node->upgradeToWriteLockOrRestart(versionNode, needRestart);
+                if (needRestart) goto restart;
+                if (parent) {
+                    parent->readUnlockOrRestart(versionParent, needRestart);
+                    if (needRestart) {
+                        node->writeUnlock();
+                        goto restart;
+                    }
+                }
+
+                leaf->insert(k, v);
+                node->writeUnlock();
+                return;
+            }
+
+
+
+
+
+            /*
             // only lock leaf node
             node->upgradeToWriteLockOrRestart(versionNode, needRestart);
             if (needRestart) goto restart;
@@ -805,6 +881,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
             }
 
             return;  // success
+            */
         }
     }
 
@@ -812,9 +889,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
     // value associated with `k` and return true. If `k` is not in the btree,
     // return false.
     bool lookup(Key k, Value &result) {
-        auto hc_find = hc.find(k);
-        if (hc_find) {
-            result = *hc_find;
+        if (hc.find(k, result)) {
             return true;
         }
 
