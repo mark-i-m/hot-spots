@@ -465,8 +465,6 @@ struct BTree : public common::BTreeBase<Key, Value> {
             versionParent = versionNode;
             parent_idx = inner->lowerBound(k);
 
-            //std::cout << "parent " << parent_idx << " " << inner->keys[parent_idx] <<  " " << inner->keys[parent_idx + 1] << " looking for " << k << std::endl;
-
             // descend to the left
             if (parent_idx < inner->count - 1) {
                 is_rightmost = false;
@@ -478,8 +476,6 @@ struct BTree : public common::BTreeBase<Key, Value> {
             versionNode = node->readLockOrRestart(needRestart);
             if (needRestart) goto restart;
         }
-
-        //std::cout << "found node" << std::endl;
 
         auto leaf = static_cast<BTreeLeaf<Key, Value> *>(node);
 
@@ -561,20 +557,6 @@ struct BTree : public common::BTreeBase<Key, Value> {
 
             --end;
 
-            // // TODO: debugging
-            // l->writeUnlock();
-            // BTreeLeaf<Key, Value>* new_l;
-            // util::maybe::Maybe<Key> new_leaf_max;
-            // std::tie(new_l, new_leaf_max) = bulk_insert_traverse(it->first, /*no_split=*/ true);
-
-            // if (new_l != l) {
-            //     std::cout<<"end " << end->first <<std::endl;
-            //     std::cout<<"old leaf[0] " << l->keys[0] <<std::endl;
-            //     std::cout<<"old leaf_max " << (leaf_max ? *leaf_max : -1) <<std::endl;
-            //     std::cout<<"new leaf[0] " << new_l->keys[0] <<std::endl;
-            //     std::cout<<"new leaf_max " << (new_leaf_max ? *new_leaf_max : -1) <<std::endl;
-            // }
-
             // it == first element we haven't looked at yet
             // end == last element to insert in this iteration
             // new_elements == number elements to insert
@@ -588,8 +570,6 @@ struct BTree : public common::BTreeBase<Key, Value> {
             auto to_insert = new_elements; // number elements remaining to insert from purged
             int existing_end_idx = l->count - 1; // current last inserted idx
 
-            //auto debug = keys_end_idx; // TODO
-
             while (to_insert > 0) {
                 if (existing_end_idx < 0 || end->first > l->keys[existing_end_idx]) { // insert *end
                     l->keys[keys_end_idx] = std::move(end->first);
@@ -602,19 +582,8 @@ struct BTree : public common::BTreeBase<Key, Value> {
                     --existing_end_idx;
                 }
 
-                //if (l->keys[keys_end_idx] == 1162088421) { //TODO
-                //    debug = keys_end_idx;
-                //    std::cout << "hi there" << std::endl;
-                //}
-
                 --keys_end_idx;
             }
-
-                //if (l->keys[debug] == 1162088421) { // TODO
-                //    for (int i = 0; i < l->count + new_elements; ++i) {
-                //        std::cout << l->keys[i] << std::endl;
-                //    }
-                //}
 
             // Update stats
             l->count += new_elements;
@@ -848,78 +817,6 @@ struct BTree : public common::BTreeBase<Key, Value> {
                 node->writeUnlock();
                 return;
             }
-
-
-
-
-            /*
-            // only lock leaf node
-            node->upgradeToWriteLockOrRestart(versionNode, needRestart);
-            if (needRestart) goto restart;
-            if (parent) {
-                parent->readUnlockOrRestart(versionParent, needRestart);
-                if (needRestart) {
-                    node->writeUnlock();
-                    goto restart;
-                }
-            }
-
-            // Still holding write lock
-
-            // Maybe need to insert into hotcache
-            if (!is_root && !in_bulk_insert) {
-                auto lock_failed = ws.try_read_lock();
-
-                if (lock_failed) {
-                    node->writeUnlock();
-                    goto restart;
-                }
-
-                if (ws.is_hot_no_lock(k)) { // hot => do hotcache insert
-                    hc.insert(k, v);
-                    node->writeUnlock();
-                    ws.touch_no_lock(k, purge_fn);
-                    ws.read_unlock();
-                    return;
-                }
-                ws.read_unlock();
-
-                // not hot => do a btree insert
-                    leaf->insert(k, v);
-                    node->writeUnlock();
-
-                ws.write_lock();
-                    if (k < min_parent_key) {
-                        min_parent_key = k - leaf->maxEntries;
-                        max_parent_key = k + 1;
-                    } else if (k >= max_parent_key) {
-                        min_parent_key = k;
-                        max_parent_key = k + leaf->maxEntries;
-                    }
-
-                    if (ws.is_hot_no_lock(k)) { // check again
-                        hc.insert(k, v);
-                        ws.touch_no_lock(k, purge_fn);
-                    } else {
-                        bool should_hc =
-                        ws.touch_no_lock(min_parent_key, max_parent_key, k, purge_fn);
-                        // NOTE: race condition: if the range is purged between the
-                        // previous statement and the next one, it will be secretly
-                        // in the HC, which is incorrect.
-                        if (should_hc) {
-                            hc.insert_range(min_parent_key, max_parent_key);
-                        }
-                    }
-                ws.write_unlock();
-            }
-            // If root or leftmost, just do the normal thing... for simplicity
-            else {
-                leaf->insert(k, v);
-                node->writeUnlock();
-            }
-
-            return;  // success
-            */
         }
     }
 
@@ -964,12 +861,6 @@ struct BTree : public common::BTreeBase<Key, Value> {
 
         BTreeLeaf<Key, Value> *leaf =
             static_cast<BTreeLeaf<Key, Value> *>(node);
-
-        //if (k == 1162088421) {
-        //            for (int i = 0; i < leaf->count; ++i) {
-        //                std::cout << leaf->keys[i] << std::endl;
-        //            }
-        //}
 
         unsigned pos = leaf->lowerBound(k);
         bool success;
