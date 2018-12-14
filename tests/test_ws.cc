@@ -27,54 +27,22 @@ void test_simple() {
     btree_hybrid::WS<Key, N> ws;
 
     // No evictions
-    ws.touch(0, 10, 1, [](Key, Key){
-            assert(false);
-            });
+    assert(ws.touch(0, 10, 1));
     for (int i = 1; i < 2 * N; ++i) {
-        ws.touch(1, [](Key, Key) {
-                assert(false);
-                });
+        assert(ws.touch(0, 10, 1));
     }
-
-    assert(ws.is_hot(5));
 
     // Evict LRU [0, 10)
     for (int i = 1; i < N; ++i) {
-        ws.touch(i * 10, i * 10 + 10, i * 10, [](Key, Key){
-                assert(false);
-                });
+        assert(ws.touch(i * 10, i * 10 + 10, i * 10));
     }
 
-    for (int i = 1; i < N; ++i) {
-        assert(ws.is_hot(i * 10 + 1));
-    }
+    assert(!ws.touch(N * 10, N * 10 + 10, N * 10));
 
-    assert(ws.is_hot(5));
-
-    auto purged1 = false;
-    ws.touch(N * 10, N * 10 + 10, N * 10, [&purged1](Key kl, Key kh){
-            assert(kl == 0);
-            assert(kh == 10);
-            purged1 = true;
-            });
-    assert(purged1);
-    assert(!ws.is_hot(5));
-
-    // Touch the LRU
-    ws.touch(15, [](Key, Key){
-            assert(false);
-            });
-
-    auto purged2 = false;
-    ws.touch(N * 100, N * 100 + 10, N * 100, [&purged2](Key kl, Key kh){
-            assert(kl == 20);
-            assert(kh == 30);
-            purged2 = true;
-            });
-    assert(purged2);
-    assert(!ws.is_hot(5));
-    assert(ws.is_hot(15));
-    assert(!ws.is_hot(25));
+    assert(ws.needs_purge());
+    Key kl, kh;
+    std::tie(kl, kh) = ws.purge_range();
+    assert(kl == 0 && kh == 10);
 }
 
 void test_simple_concurrent() {
@@ -87,14 +55,10 @@ void test_simple_concurrent() {
 
     // Data and routine for all threads.
     auto f = [&ws](int tno) {
-        ws.touch(tno * 10, tno * 10 + 10, tno * 10 + 4, [](Key, Key){
-                assert(false);
-                });
+        ws.touch(tno * 10, tno * 10 + 10, tno * 10 + 4);
 
         for (int i = 0; i < TEST_SIZE; ++i) {
-            ws.touch(tno * 10 + (i % 10), [](Key, Key){
-                    assert(false);
-                    });
+            ws.touch(tno * 10, tno * 10 + 10, tno * 10 + (i % 10));
         }
     };
 
