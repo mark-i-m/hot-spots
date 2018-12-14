@@ -361,7 +361,7 @@ struct BTreeInner : public BTreeInnerBase {
 };
 
 // A generic, thread-safe btree using OLC.
-template <class Key, class Value, size_t WSSize = 10>
+template <class Key, class Value, size_t WSSize = 1000>
 struct BTree : public common::BTreeBase<Key, Value> {
     // The root node of the btree.
     std::atomic<NodeBase *> root;
@@ -404,7 +404,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
             _mm_pause();
     }
 
-    std::pair<BTreeLeaf<Key, Value>*, util::maybe::Maybe<Key>> bulk_insert_traverse(Key k) {
+    std::pair<BTreeLeaf<Key, Value>*, util::maybe::Maybe<Key>> bulk_insert_traverse(Key k, bool no_split = false) {
          int restartCount = 0;
     restart:
         if (restartCount++) yield(restartCount);
@@ -426,6 +426,8 @@ struct BTree : public common::BTreeBase<Key, Value> {
 
             // Split eagerly if full
             if (inner->isFull()) {
+                assert(!no_split);
+
                 // Lock
                 if (parent) {
                     parent->upgradeToWriteLockOrRestart(versionParent,
@@ -463,6 +465,8 @@ struct BTree : public common::BTreeBase<Key, Value> {
             versionParent = versionNode;
             parent_idx = inner->lowerBound(k);
 
+            //std::cout << "parent " << parent_idx << " " << inner->keys[parent_idx] <<  " " << inner->keys[parent_idx + 1] << " looking for " << k << std::endl;
+
             // descend to the left
             if (parent_idx < inner->count - 1) {
                 is_rightmost = false;
@@ -475,10 +479,14 @@ struct BTree : public common::BTreeBase<Key, Value> {
             if (needRestart) goto restart;
         }
 
+        //std::cout << "found node" << std::endl;
+
         auto leaf = static_cast<BTreeLeaf<Key, Value> *>(node);
 
         // Split leaf if full
         if (leaf->count == leaf->maxEntries) {
+            assert(!no_split);
+
             // Lock
             if (parent) {
                 parent->upgradeToWriteLockOrRestart(versionParent, needRestart);
@@ -511,7 +519,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
             util::maybe::Maybe<Key> leaf_max;
             if (parent) {
                 if(!is_rightmost) {
-                    leaf_max = util::maybe::Maybe<Key>(parent->keys[parent_idx + 1]);
+                    leaf_max = util::maybe::Maybe<Key>(parent->keys[parent_idx]);
                 }
                 parent->readUnlockOrRestart(versionParent, needRestart);
                 if (needRestart) {
@@ -545,14 +553,31 @@ struct BTree : public common::BTreeBase<Key, Value> {
             // Find the elements we can insert now while respecting the amount
             // of free space and the max key.
             while (it != key_values.end()
-                    && (l->maxEntries - l->count) - new_elements > 0) {
-                if (leaf_max && it->first >= *leaf_max) {
-                    break;
-                }
-
+                    && (l->maxEntries - l->count) - new_elements > 0
+                    && !(leaf_max && it->first >= *leaf_max)) {
                 ++it; ++end;
                 ++new_elements;
             }
+
+            --end;
+
+            // // TODO: debugging
+            // l->writeUnlock();
+            // BTreeLeaf<Key, Value>* new_l;
+            // util::maybe::Maybe<Key> new_leaf_max;
+            // std::tie(new_l, new_leaf_max) = bulk_insert_traverse(it->first, /*no_split=*/ true);
+
+            // if (new_l != l) {
+            //     std::cout<<"end " << end->first <<std::endl;
+            //     std::cout<<"old leaf[0] " << l->keys[0] <<std::endl;
+            //     std::cout<<"old leaf_max " << (leaf_max ? *leaf_max : -1) <<std::endl;
+            //     std::cout<<"new leaf[0] " << new_l->keys[0] <<std::endl;
+            //     std::cout<<"new leaf_max " << (new_leaf_max ? *new_leaf_max : -1) <<std::endl;
+            // }
+
+            // it == first element we haven't looked at yet
+            // end == last element to insert in this iteration
+            // new_elements == number elements to insert
 
             // Merge the existing entries with the purged entries in sorted
             // order from the end.  Doing it from the end means that we always
@@ -561,22 +586,35 @@ struct BTree : public common::BTreeBase<Key, Value> {
             // "end" idx == l->count + new_elements - 1
             auto keys_end_idx = l->count + new_elements - 1; // ultimately will be the end idx
             auto to_insert = new_elements; // number elements remaining to insert from purged
-            auto existing_end_idx = l->count; // current last inserted idx
+            int existing_end_idx = l->count - 1; // current last inserted idx
+
+            //auto debug = keys_end_idx; // TODO
 
             while (to_insert > 0) {
-                if (end->first > l->keys[existing_end_idx]) { // insert *end
+                if (existing_end_idx < 0 || end->first > l->keys[existing_end_idx]) { // insert *end
                     l->keys[keys_end_idx] = std::move(end->first);
                     l->payloads[keys_end_idx] = std::move(end->second);
                     --end;
+                    --to_insert;
                 } else {
                     l->keys[keys_end_idx] = std::move(l->keys[existing_end_idx]);
                     l->payloads[keys_end_idx] = std::move(l->payloads[existing_end_idx]);
                     --existing_end_idx;
                 }
 
+                //if (l->keys[keys_end_idx] == 1162088421) { //TODO
+                //    debug = keys_end_idx;
+                //    std::cout << "hi there" << std::endl;
+                //}
+
                 --keys_end_idx;
-                --to_insert;
             }
+
+                //if (l->keys[debug] == 1162088421) { // TODO
+                //    for (int i = 0; i < l->count + new_elements; ++i) {
+                //        std::cout << l->keys[i] << std::endl;
+                //    }
+                //}
 
             // Update stats
             l->count += new_elements;
@@ -761,6 +799,7 @@ struct BTree : public common::BTreeBase<Key, Value> {
                                 key_values.push_back(it);
                             }
                         }
+                        locked_hc.unlock();
                         bulk_insert(key_values);
                         ws.remove(purge_low, purge_high);
                         for (auto it : key_values) {
@@ -809,7 +848,6 @@ struct BTree : public common::BTreeBase<Key, Value> {
                 node->writeUnlock();
                 return;
             }
-
 
 
 
@@ -926,6 +964,13 @@ struct BTree : public common::BTreeBase<Key, Value> {
 
         BTreeLeaf<Key, Value> *leaf =
             static_cast<BTreeLeaf<Key, Value> *>(node);
+
+        //if (k == 1162088421) {
+        //            for (int i = 0; i < leaf->count; ++i) {
+        //                std::cout << leaf->keys[i] << std::endl;
+        //            }
+        //}
+
         unsigned pos = leaf->lowerBound(k);
         bool success;
         if ((pos < leaf->count) && (leaf->keys[pos] == k)) {

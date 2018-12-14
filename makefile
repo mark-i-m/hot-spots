@@ -9,7 +9,7 @@ OUTDIR = build
 
 BMKMAINS = eval
 BTREETESTMAINS = test_btree
-OTHERTESTMAINS = test_util tests_hc test_ws
+OTHERTESTMAINS = test_util tests_hc test_ws test_btree_hybrid
 
 BTREEHS = $(wildcard $(BTREEDIR)/*.h)
 TESTHS = $(wildcard $(TESTSDIR)/*.h)

@@ -37,6 +37,7 @@ class WS {
     K high_keys[N];
     std::atomic_uint64_t counters[N];
     std::atomic_uint64_t next;
+    bool next_should_purge = false;
 
     // LOCKING RULES
     // - You must grab a lock to read or write the `lru_map` or `counters`.
@@ -201,6 +202,7 @@ bool WS<K, N>::touch(const K& kl, const K& kh, const K& k) {
     } else {
         lock.lock();
         if (lru_map.size() == N) { // full
+            next_should_purge = true;
             lock.unlock();
             return false;
         }
@@ -245,11 +247,13 @@ void WS<K, N>::remove(const K& kl, const K&) {
     counters[idx] = 0;
     low_keys[idx] = 0xDEADBEEF;
     high_keys[idx] = 0xDEADBEEF;
+    next_should_purge = false;
+    assert(lru_map.size() < N);
 }
 
 template <typename K, size_t N>
 bool WS<K, N>::needs_purge() const {
-    return lru_map.size() == N;
+    return lru_map.size() == N && next_should_purge;
 }
 
 template <typename K, size_t N>
