@@ -361,7 +361,7 @@ struct BTreeInner : public BTreeInnerBase {
 };
 
 // A generic, thread-safe btree using OLC.
-template <class Key, class Value, size_t WSSize = 1000>
+template <class Key, class Value, size_t WSSize = 10>
 struct BTree : public common::BTreeBase<Key, Value> {
     // The root node of the btree.
     std::atomic<NodeBase *> root;
