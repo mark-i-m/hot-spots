@@ -372,7 +372,8 @@ struct BTree : public common::BTreeBase<Key, Value> {
     // "Working Set", but it is really an LRU approximation.
     WS<Key, WSSize> ws;
 
-    // The caching layer itself. This is just a concurrent hashmap.
+    // The caching layer itself. This is just a concurrent hashmap. HC stands
+    // for "hot cache".
     cuckoohash_map<Key, Value> hc;
 
     // This lock is grabbed to do "purges" (evictions from the cache of a range
