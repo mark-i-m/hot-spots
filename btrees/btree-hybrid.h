@@ -360,15 +360,27 @@ struct BTreeInner : public BTreeInnerBase {
     }
 };
 
-// A generic, thread-safe btree using OLC.
+// A generic, thread-safe btree using OLC and our cache. It is a modification
+// of the OLC implementation from the CMU Bw-tree critique paper.
 template <class Key, class Value, size_t WSSize = 10>
+
 struct BTree : public common::BTreeBase<Key, Value> {
     // The root node of the btree.
     std::atomic<NodeBase *> root;
 
+    // WS is the policy layer of the Hybrid B-tree. It originally stood for
+    // "Working Set", but it is really an LRU approximation.
     WS<Key, WSSize> ws;
+
+    // The caching layer itself. This is just a concurrent hashmap.
     cuckoohash_map<Key, Value> hc;
 
+    // This lock is grabbed to do "purges" (evictions from the cache of a range
+    // of values). It is only ever grabbed by insertions; lookups don't need to
+    // grab any locks.
+    //
+    // It is only grabbed as a write lock when a thread does a purge.
+    // Otherwise, it is grabbed as a read lock.
     mutable pthread_rwlock_t big_lock;
 
     // Construct a new btree with exactly one node, which is an empty leaf node.
@@ -404,7 +416,21 @@ struct BTree : public common::BTreeBase<Key, Value> {
             _mm_pause();
     }
 
-    std::pair<BTreeLeaf<Key, Value>*, util::maybe::Maybe<Key>> bulk_insert_traverse(Key k, bool no_split = false) {
+    // A helper to traverse the B-tree, grabbing appropriate locks. It is used by
+    // the `bulk_insert` routine, which is used for purges.
+    //
+    // This routine returns the page that key `k` would be on. It grabs the
+    // page's write lock before returning it. The caller is responsible for
+    // unlocking. Moreover, the routine also returns the maximum value that can
+    // be on this page without updating the parent's keys; this max value is
+    // `Nothing` if this is the rightmost leaf.
+    //
+    // In the process, zero or more B-tree nodes may be split.
+    //
+    // The `no_split` flag is used for debugging. A panic occurs if this flag
+    // is true and a node is split by this routine.
+    std::pair<BTreeLeaf<Key, Value>*, util::maybe::Maybe<Key>>
+    bulk_insert_traverse(Key k, bool no_split = false) {
          int restartCount = 0;
     restart:
         if (restartCount++) yield(restartCount);
@@ -512,9 +538,10 @@ struct BTree : public common::BTreeBase<Key, Value> {
             // only lock leaf node
             node->upgradeToWriteLockOrRestart(versionNode, needRestart);
             if (needRestart) goto restart;
-            util::maybe::Maybe<Key> leaf_max;
+            util::maybe::Maybe<Key> leaf_max; // Nothing by default
             if (parent) {
                 if(!is_rightmost) {
+                    // Set max value before potentially returning
                     leaf_max = util::maybe::Maybe<Key>(parent->keys[parent_idx]);
                 }
                 parent->readUnlockOrRestart(versionParent, needRestart);
@@ -527,6 +554,9 @@ struct BTree : public common::BTreeBase<Key, Value> {
         }
     }
 
+    // Does an optimized insertion of the list of key-value pairs into the
+    // B-tree. This routine is _only_ to be called if the caller is holding the
+    // `big_lock`. It is only used for purges.
     void bulk_insert(std::vector<std::pair<Key, Value>> key_values) {
         if (key_values.empty()) {
             return;
@@ -591,7 +621,8 @@ struct BTree : public common::BTreeBase<Key, Value> {
             // unlock leaf
             l->writeUnlock();
 
-            // need to do a normal insertion to ensure space
+            // need to do a normal insertion to ensure space. This uses the
+            // normal node splitting stuff to simplify the design.
             if(it != key_values.end()) {
                 insert_inner(it->first, it->second, true);
                 ++it;
@@ -599,23 +630,37 @@ struct BTree : public common::BTreeBase<Key, Value> {
         }
     }
 
+    // Grab the `big_lock` as a reader.
     void big_read_lock() const {
         pthread_rwlock_rdlock(&big_lock);
     }
 
+    // Grab the `big_lock` as a writer.
     void big_write_lock() const {
         pthread_rwlock_wrlock(&big_lock);
     }
 
+    // Release the `big_lock` as a reader or writer.
     void big_unlock() const {
         pthread_rwlock_unlock(&big_lock);
     }
 
+    // The insert routine of the B-tree. This is a thread-safe insertion of the
+    // (k, v) pair into this B-tree.
+    //
+    // It is a thin wrapper around `insert_inner` which does the heavy lifting.
     void insert(Key k, Value v) {
         insert_inner(k, v, false);
     }
 
-    // Insert the (k, v) pair into the tree.
+    // Insert the (k, v) pair into the tree thread-safely. If `in_bulk_insert`
+    // is true, avoid all paths that may interact with the policy or cache
+    // layers. In other words, if `in_bulk_insert`, this routine behaves just
+    // like the normal B-tree with OLC.
+    //
+    // Everything in this routine is normal until we have found a B-tree leaf.
+    // See the comment at that point. For simplicity, we always traverse the
+    // tree before doing anything with the cache.
     void insert_inner(Key k, Value v, bool in_bulk_insert) {
         int restartCount = 0;
     restart:
@@ -745,7 +790,26 @@ struct BTree : public common::BTreeBase<Key, Value> {
             if (parent) parent->writeUnlock();
             goto restart;
         } else {
+            // This is the code path in which we actually might use the
+            // cache/policy. Here are some invariants:
+            // - The policy is always aware of what is in the cache. There is
+            //   nothing in the cache that the policy did not approve.
+            // - Once data is in the tree, it must always be in either the
+            //   cache or the tree (or possibly both).
+            //
+            // In this code, we simplify things by using the `big_lock` to
+            // manage concurrency for both the cache and policy layers.
+            //
+            // For the most part, there is only ever one lock held at any given
+            // time.  In some places, we do some lock crabbing, though. This
+            // makes it _way_ easier to avoid deadlocks.
+
+            // Handling the root node is a bit weird so... just don't use the
+            // cache for the root.
             if (!is_root && !in_bulk_insert) {
+                // If we are inserting a new minimum or maximum key in the
+                // B-tree, make up the other endpoint of the range we are
+                // inserting to the cache.
                 if (k < min_parent_key) {
                     min_parent_key = k - leaf->maxEntries;
                     max_parent_key = k + 1;
@@ -754,11 +818,37 @@ struct BTree : public common::BTreeBase<Key, Value> {
                     max_parent_key = k + leaf->maxEntries;
                 }
 
+                // Grab the big read lock and check if a purge is needed.
+                // Holding the read lock prevents a purge from happening while
+                // we are checking.
                 big_read_lock();
                 if (ws.needs_purge()) {
                     big_unlock();
+
+                    // If we found that purge is needed, then we grab the big
+                    // write lock to attempt to do the purge.
+                    //
+                    // We need to make sure that a purge is still needed since
+                    // another thread could have done it between the previous
+                    // line and the next one.
+                    //
+                    // After a purge, we restart. This simplifies the logic
+                    // somewhat and means that the common case has no write
+                    // locks on it.
+                    //
+                    // We also purge even if we didn't restart because it makes
+                    // life easier.
+
                     big_write_lock();
                     if (ws.needs_purge()) {
+                        // Purge the range of values indicated by the policy.
+                        // To do this, we briefly lock the hash table to search
+                        // for keys in the range. This is really just an
+                        // unfortunate consequence of the fact that the
+                        // concurrent hash map we choose doesn't have an
+                        // efficient way to iterate over all buckets.
+                        //
+                        // FIXME: unforunately, this is extremely sloooooowww...
                         Key purge_low, purge_high;
                         std::tie(purge_low, purge_high) = ws.purge_range();
                         std::vector<std::pair<Key, Value>> key_values;
@@ -768,8 +858,18 @@ struct BTree : public common::BTreeBase<Key, Value> {
                                 key_values.push_back(it);
                             }
                         }
+                        // We can unlock here because lookup threads don't
+                        // mutate the cache, and we are the only insertion
+                        // thread with the big writer lock.
                         locked_hc.unlock();
+
+                        // Do a bulk insertion here. This must happen before
+                        // the keys are removed from the cache so that readers
+                        // don't miss keys.
                         bulk_insert(key_values);
+
+                        // Remove from cache and inform policy that the range
+                        // is gone.
                         ws.remove(purge_low, purge_high);
                         for (auto it : key_values) {
                             hc.erase(it.first);
@@ -778,14 +878,28 @@ struct BTree : public common::BTreeBase<Key, Value> {
                     big_unlock();
                     goto restart;
                 } else {
+                    // At this point, we are still holding the big read lock.
+
+                    // If no purging is needed, we can just inform the policy
+                    // layer of the touch (to update its stats). `touch`
+                    // returns true if the key is in a hot range. The policy
+                    // (`ws`) is thread-safe, so multiple threads holding the
+                    // big read lock can safely do this.
                     if (ws.touch(min_parent_key, max_parent_key, k)) { // if is hot
+                        // cache insert. The hash map handles concurrent updates.
                         hc.insert(k, v);
                         big_unlock();
                         return;
                     } else {
+                        // release big read lock. This avoids deadlocks since we
+                        // may need to restart. Holding the read lock any longer
+                        // wouldn't be useful anyway.
                         big_unlock();
 
-                        // only lock leaf node
+                        // do a normal B-tree insertion.
+
+                        // Release the parent's "read lock" (possibly restart) after
+                        // grabbing the node's write lock.
                         node->upgradeToWriteLockOrRestart(versionNode, needRestart);
                         if (needRestart) goto restart;
                         if (parent) {
@@ -796,12 +910,15 @@ struct BTree : public common::BTreeBase<Key, Value> {
                             }
                         }
 
+                        // Normal B-tree insertion.
                         leaf->insert(k, v);
                         node->writeUnlock();
                         return;
                     }
                 }
             } else {
+                // Normal B-tree insertion.
+
                 // only lock leaf node
                 node->upgradeToWriteLockOrRestart(versionNode, needRestart);
                 if (needRestart) goto restart;
@@ -824,9 +941,16 @@ struct BTree : public common::BTreeBase<Key, Value> {
     // value associated with `k` and return true. If `k` is not in the btree,
     // return false.
     bool lookup(Key k, Value &result) {
+        // No locks needed. Concurrency is handled by the hash map :P
         if (hc.find(k, result)) {
             return true;
         }
+
+        // If cache miss, then do normal B-tree lookup. Insertions maintain the
+        // invariant that if a key is inserted, then it is always in at least
+        // one of the cache or the tree. So if we get here, we had a cache
+        // miss, and if we still can't find the key in the tree, then it is not
+        // in the structure at all.
 
         int restartCount = 0;
     restart:
@@ -878,6 +1002,9 @@ struct BTree : public common::BTreeBase<Key, Value> {
         return success;
     }
 
+    // NOTE: This does not work. It's just a copy of the implementation from
+    // the OLC. This implementation does not actually account for the cache.
+    //
     // Do a range query on the btree. Starting with the least key greater than
     // or equal to `k`, scan at most `range` values into the buffer pointed to
     // by `output`. Return the number of elements read. Note that we may read

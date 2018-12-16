@@ -12,8 +12,12 @@
 
 namespace btree_hybrid {
 
-// Tracks stats for ranges of pages that have been touched and chooses ranges
-// to evict.
+// Tracks stats for ranges of keys that have been touched and chooses ranges to
+// evict from the cache.
+//
+// We do very little synchronization in this data structure, relying instead on
+// the fact that the B-tree hybrid implementation uses the `big_lock` to control
+// when certain operations can happen.
 template <typename K, size_t N>
 class WS {
     // We implement an LRU replacement policy. Each range has a unique position
@@ -36,8 +40,11 @@ class WS {
     K high_keys[N];
     std::atomic_uint64_t counters[N];
     std::atomic_uint64_t next;
+
+    // Indicates whether the cache needs to be "purged" (a range evicted).
     bool next_should_purge = false;
 
+    // A mutex lock for small critical sections in the case of insertions.
     mutable std::mutex lock;
 
     // Set range i to the MRU if it is still in the map.
@@ -45,6 +52,8 @@ class WS {
     // NOTE: caller should already be holding the lock.
     void set_mru(size_t i);
 
+    // Returns true if the range [kl, kh) has an overlap with another range.
+    // We assume that no range is completely subsumed by another range.
     bool weird_overlaps(K kl, K kh);
 
 public:
@@ -52,9 +61,20 @@ public:
     // Construct a WS with at most `N` pages.
     WS();
 
+    // Inform the WS that the given key k in range [kl, kh) has been touched.
+    // Returns true if the key/range is hot and should be cached.
     bool touch(const K& kl, const K& kh, const K& k);
+
+    // Remove the given range [kl, kh) from the WS. This should only be called
+    // on ranges returned from `purge_range` and only after they have been
+    // removed from the cache.
     void remove(const K& kl, const K& kh);
+
+    // Returns true if the cache requires a purge (because it is full).
     bool needs_purge() const;
+
+    // Returns the range to purge. This should only be called if `needs_purge`
+    // is true.
     std::pair<K, K> purge_range() const;
 };
 
@@ -93,9 +113,16 @@ template <typename K, size_t N>
 bool WS<K, N>::touch(const K& kl, const K& kh, const K& k) {
     auto maybe = lru_map.find(k);
     if (maybe) {
+        // If the given key is already in a hot range, make that range the MRU.
         set_mru(**maybe);
         return true;
     } else {
+        // If the given key is not in a hot range, we atomically insert it into
+        // the WS. This involves a brief critical section.
+        //
+        // To simplify life, we just reject a range if
+        // a) the WS is already full... OR
+        // b) the range has a weird overlap with another range.
         lock.lock();
         if (lru_map.size() == N) { // full
             next_should_purge = true;
@@ -122,6 +149,7 @@ bool WS<K, N>::touch(const K& kl, const K& kh, const K& k) {
             }
         }
 
+        // Do the insertion...
         assert(lru_counter == 0);
 
         low_keys[lru] = kl;
@@ -149,6 +177,7 @@ void WS<K, N>::remove(const K& kl, const K&) {
 
 template <typename K, size_t N>
 bool WS<K, N>::needs_purge() const {
+    // Returns true if the WS is full and should be purged.
     return lru_map.size() == N && next_should_purge;
 }
 
