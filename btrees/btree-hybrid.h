@@ -362,7 +362,8 @@ struct BTreeInner : public BTreeInnerBase {
 
 // A generic, thread-safe btree using OLC and our cache. It is a modification
 // of the OLC implementation from the CMU Bw-tree critique paper.
-template <class Key, class Value, size_t WSSize = 1000>
+template <class Key, class Value, size_t WSSize = 10>
+
 struct BTree : public common::BTreeBase<Key, Value> {
     // The root node of the btree.
     std::atomic<NodeBase *> root;
