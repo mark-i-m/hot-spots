@@ -1,6 +1,6 @@
 # HotSpots
 
-This is the repo for our databases class project.
+This is the repo for our databases class project. Our report is in `report.pdf`.
 
 We modify the concurrent B-tree with OLC from https://github.com/wangziqi2016/index-microbench.
 
@@ -61,3 +61,4 @@ The organization of this repository is as follows:
 - `figures/`: Figures produced from results with the `plot.py` script.
 - `results/`: Results produced from the `run_eval.sh` script.
 - `tests/`: Correctness tests for the B-trees.
+- `report.pdf`: Our report.
