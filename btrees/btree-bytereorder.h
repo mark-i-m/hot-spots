@@ -386,6 +386,7 @@ public:
 
     // Insert the (k, v) pair into the tree.
     void insert(Key key, Value v) {
+        // First, reorder the key.
         Key k = reorder(key);
 
         int restartCount = 0;
@@ -500,6 +501,7 @@ public:
     // value associated with `k` and return true. If `k` is not in the btree,
     // return false.
     bool lookup(Key key, Value &result) {
+        // First, reorder the key.
         Key k = reorder(key);
 
         int restartCount = 0;
