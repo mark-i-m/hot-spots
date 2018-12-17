@@ -135,7 +135,7 @@ fi
 # Set the cpu frequency
 sudo cpupower frequency-set -g performance
 
-# Loop through for [R1..R2] and [W1..W2] and start the experiment
+# Loop through for [R1..R2] and [W1..W2] and start each experiment sequentially
 for i in $(seq $R1 $R2)
 do
     for j in $(seq $W1 $W2)
@@ -150,6 +150,6 @@ do
     done
 done
 
-# End
-
+# Set the current user as the owner of the results directory
 sudo chown -R `whoami` ${RESULTS_DIR}
+# End
