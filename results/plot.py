@@ -20,7 +20,7 @@ import heapq
 # All runs should have the same value for W, B, X, N, and should be run with
 # the same implementation; only R varies.
 USAGE = """
-Usage: ./script (avg|99) <list of directories that contain data>
+Usage: ./script (r|w) (avg|99) <list of directories that contain data>
 
   r indicates that we are varying r
   w indicates that we are varying w
