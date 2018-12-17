@@ -108,7 +108,6 @@ void reader_child(int thread_id, unsigned long long int ops,
         // generate a random number (key) of uint_64 to read
         read_value = distr(eng);
         // the number can only be as big as the counter
-        //cout << "random is : " << read_value << endl;
         read_value = read_value % (counter.load(std::memory_order_relaxed));
         std::pair<unsigned long long int, unsigned long long int> read;
         read.first = read_value;
@@ -125,7 +124,6 @@ void reader_child(int thread_id, unsigned long long int ops,
             x = 0;
             time_x = 0;
         }
-        //cout << "Value read is " << read.second << endl;
     }
     // after all operations are done, store the vector containing times in a file
     ofstream myfile;
@@ -197,7 +195,6 @@ bool check_all_true(vector<bool> &arr) {
     m.lock();
     for (size_t i = 0; i < arr.size(); i++) {
         if (arr[i] == false) {
-	    //cout << "Parent has the lock" << endl; 
             m.unlock();
 	    return false;
 	}
@@ -239,10 +236,9 @@ void test(int R, int W, unsigned long long int N, common::BTreeBase<unsigned lon
             writers[i] = std::thread(writer_child, i + R, N, btree, X, path);
         // wait for all children threads to be ready
         while (!check_all_true(tready)) {
-            //cout << "Wait" << endl;
         }
         cout << "Now ready to go" << endl;
-	// ready. = true is what all spawned threads are waiting at. Now they begin
+	// ready = true is what all spawned threads are waiting at. Now they begin
         ready = true;
 	
         for (int i = 0; i < R; i++) readers[i].join();
@@ -317,6 +313,6 @@ int main(int argc, char** argv) {
     string path = argv[7];
     // call the function that spawns threads
     test(R, W, N, btree, X, path);
-  //  report_average_time(X, N);
+    //  report_average_time(X, N);
     return 0;
 }
