@@ -3,7 +3,7 @@
 // make eval.bmk
 // input bulk_load_limit, R, W, N, X
 
-// Features to add in later :
+// Features for future additions :
 // - think time
 // - bulk_insert
 
@@ -26,14 +26,18 @@
 #include <mutex>
 
 using namespace std;
+// get number of CPUs
 int get_nprocs(void);
 int get_nprocs_conf(void);
+
+// Create a Btreetype
 enum class BTreeType {
     BTreeOLC = 1,
     BTreeHybrid = 2,
     BTreeByteReorder = 3,
 };
 
+// for timer
 uint64_t rdtsc() {
     unsigned int lo, hi;
     __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
@@ -41,14 +45,20 @@ uint64_t rdtsc() {
 }
 
 // global variables
+// counter is for knowing what has to be inserted next sequentially
 std::atomic_ullong counter = {0};
 std::atomic_ullong cpu = {0};
+// are all threads ready and does parent thread know that
 std::atomic<bool> ready = {false};
+// are all threads ready
 vector<bool> tready;
+// for locking
 std::mutex m;
 
 unsigned long long int get_counter() { return ++counter; }
 int get_cpu() { return ++cpu; }
+
+//function to print average time in std::out (console)
 /* void report_average_time(unsigned long long int X, unsigned long long int ops) {
     unsigned long long int w = 0;
     size_t i;
@@ -69,30 +79,33 @@ int get_cpu() { return ++cpu; }
     cout << "Average read time for 1 operation is : " << r / ops << endl;
 }
 */
+
 void reader_child(int thread_id, unsigned long long int ops,
                   common::BTreeBase<unsigned long long int, unsigned long long int> *btree, unsigned long long int X, string path) {
+    // set cpu
     set_cpu(get_cpu());
     m.lock();
-    //cout << thread_id << " has the lock" << endl;
+    // announce that it's ready
     tready[thread_id] = true;
     m.unlock();
     // wait till all threads have spawned
     while (!ready.load(std::memory_order_relaxed)) {
     };
-    
+    // to store time taken in x operations
+    // each entry represents time of x operations except last entry. last entry
+    // represents time of last few ops%X operations.
     vector<uint64_t> r_timer;
     unsigned long long int read_value;
     std::random_device rd;  // Get a random seed from the OS entropy device, or whatever
     std::mt19937_64 eng(rd());  // Use the 64-bit Mersenne Twister 19937 generator
     // and seed it with entropy.
     std::uniform_int_distribution<unsigned long long> distr;
-    // each entry represents time of x operations except last entry. last entry
-    // represents time of last few ops%X operations.
+    
     unsigned long long int x = 0;
     uint64_t time_x = 0;
     
     while (ops) {
-        // generate a random number of uint_64 to read
+        // generate a random number (key) of uint_64 to read
         read_value = distr(eng);
         // the number can only be as big as the counter
         //cout << "random is : " << read_value << endl;
@@ -100,12 +113,13 @@ void reader_child(int thread_id, unsigned long long int ops,
         std::pair<unsigned long long int, unsigned long long int> read;
         read.first = read_value;
         read.second = 0;
-        //cout << "Thread " << thread_id << " reading Key " << read_value << endl;
+        // Measure time taken for operation and add it to time taken for x operations variable
         uint64_t tick = rdtsc();
         btree->lookup(read.first, read.second);
         time_x += rdtsc() - tick;
         x++;
         ops--;
+	// if x opeations are done, so time has been measured, so push it and start again
         if (x == X || ops == 0) {
             r_timer.push_back(time_x);
             x = 0;
@@ -113,6 +127,7 @@ void reader_child(int thread_id, unsigned long long int ops,
         }
         //cout << "Value read is " << read.second << endl;
     }
+    // after all operations are done, store the vector containing times in a file
     ofstream myfile;
     string file_name = path+"Read_"+std::to_string(thread_id);
     myfile.open (file_name);
@@ -126,16 +141,18 @@ void reader_child(int thread_id, unsigned long long int ops,
 
 void writer_child(int thread_id, unsigned long long int ops,
                   common::BTreeBase<unsigned long long int, unsigned long long int> *btree, unsigned long long int X, string path) {
+    // set cpu
     set_cpu(get_cpu());
     
     m.lock();
-    //cout << thread_id << " has the lock" << endl;
+    // announce that it's ready
     tready[thread_id] = true;
     m.unlock();
     // wait till all threads have spawned
     while (!ready.load(std::memory_order_relaxed)) {
     }
     
+    // store time of every x operations in a vector
     vector<uint64_t> w_timer;
     unsigned long long int write_value;
     unsigned long long int x = 0;
@@ -148,20 +165,20 @@ void writer_child(int thread_id, unsigned long long int ops,
         write_value = get_counter();
         write.first = write_value;
         write.second = rand();
-        //cout << "Thread " << thread_id << " writing " << write.first << " "
-        //     << write.second << endl;
+        // calculate time for operation
         uint64_t tick = rdtsc();
         btree->insert(write);
         time_x += rdtsc() - tick;
         x++;
 	ops--;
+	// if x operations are done, store the time taken in the vector
         if (x == X || ops == 0) {
             w_timer.push_back(time_x);
             x = 0;
             time_x = 0;
         }
     }
-    
+    // after all operations are done, store the time vector in a file
     ofstream myfile;
     string file_name = path+"Write_"+std::to_string(thread_id);
     myfile.open (file_name);
@@ -174,6 +191,8 @@ void writer_child(int thread_id, unsigned long long int ops,
     return;
 }
 
+// function to check if all the values in a boolean vector are true
+// used by parent thread to decide if all threads it spawned are ready
 bool check_all_true(vector<bool> &arr) {
     m.lock();
     for (size_t i = 0; i < arr.size(); i++) {
@@ -189,13 +208,13 @@ bool check_all_true(vector<bool> &arr) {
 
 void test(int R, int W, unsigned long long int N, common::BTreeBase<unsigned long long int, unsigned long long int> *btree,
           unsigned long long int X, string path) {
-    // ready variables to start the threads at the same time
-
-    // spawn reader threads
+ 
+    // spawn reader threads : carefully handle the case of R=0 or W=0
     if (W == 0 && R != 0) {
         std::thread readers[R];
         for (int i = 0; i < R; i++)
             readers[i] = std::thread(reader_child, i, N, btree, X, path);
+	// wait for all children threads to be ready
         while (!check_all_true(tready)) {
         }
         ready = true;
@@ -205,6 +224,7 @@ void test(int R, int W, unsigned long long int N, common::BTreeBase<unsigned lon
         std::thread writers[W];
         for (int i = 0; i < W; i++)
             writers[i] = std::thread(writer_child, i, N, btree, X, path);
+	// wait for all children threads to be ready
         while (!check_all_true(tready)) {
         }
         ready = true;
@@ -217,13 +237,14 @@ void test(int R, int W, unsigned long long int N, common::BTreeBase<unsigned lon
         std::thread writers[W];
         for (int i = 0; i < W; i++)
             writers[i] = std::thread(writer_child, i + R, N, btree, X, path);
-        //cout << "Checking if ready" << ready << endl;
+        // wait for all children threads to be ready
         while (!check_all_true(tready)) {
             //cout << "Wait" << endl;
         }
         cout << "Now ready to go" << endl;
+	// ready. = true is what all spawned threads are waiting at. Now they begin
         ready = true;
-
+	
         for (int i = 0; i < R; i++) readers[i].join();
         for (int i = 0; i < W; i++) writers[i].join();
     }
@@ -232,8 +253,9 @@ void test(int R, int W, unsigned long long int N, common::BTreeBase<unsigned lon
 
 int main(int argc, char** argv) {
     set_cpu(0);
+    // bulk_load_limit initializes the btree with some pre-existing values before evaluation starts
     unsigned long long int bulk_load_limit = stoull(argv[2]);
-    //cout<<argv[1]<<endl<<argv[2]<<endl<<argv[3]<<endl<<argv[4]<<endl<<argv[5]<<argv[6]<<argv[7]<<endl;
+    // treetype tells whether we are evaluating OLC, hybrid or bytereorder implementation
     int treetype = atoi(argv[1]);
     BTreeType type = BTreeType::BTreeOLC;
 
@@ -266,7 +288,7 @@ int main(int argc, char** argv) {
                 return nullptr;
         }
     };
-
+    // insert the keys from 1 to bulk_load_limit in the btree
     common::BTreeBase<Key, Value> *btree = new_btree_fn();
     unsigned long long int insert = 1;
     srand(time(NULL));
@@ -289,10 +311,11 @@ int main(int argc, char** argv) {
     for (int i = 0; i < R + W; i++) {
         tready[i] = false;
     }
+    // counter stores bulk_load_limit, next insertions will be ahead of this sequentially
     counter.store(bulk_load_limit, std::memory_order_relaxed);
-   // cout<<"This system has processors configured and  processors available.\n"<<get_nprocs_conf()<<" "<< get_nprocs();
-    //cout<<numCPU<<endl;
+    // path where files with results will be saved
     string path = argv[7];
+    // call the function that spawns threads
     test(R, W, N, btree, X, path);
   //  report_average_time(X, N);
     return 0;
