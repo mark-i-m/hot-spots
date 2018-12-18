@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 
 ######################################################################
 #  This script runs experiments based on the following               #
