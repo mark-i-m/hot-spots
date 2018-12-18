@@ -41,7 +41,7 @@ function HELP {
   echo "${REV}-j${NORM}  --Sets the end value for the number of read threads ${BOLD}j${NORM}. Default is ${BOLD}1${NORM}."
   echo "${REV}-c${NORM}  --Sets the start value for the number of write threads ${BOLD}c${NORM}. Default is ${BOLD}1${NORM}."
   echo "${REV}-d${NORM}  --Sets the end value for the number of write threads ${BOLD}d${NORM}. Default is ${BOLD}1${NORM}."
-  echo "${REV}-t${NORM}  --Sets the value for tree type ${BOLD}t${NORM}. Default is ${BOLD}olc${NORM}."
+  echo "${REV}-t${NORM}  --Sets the value for tree type ${BOLD}t${NORM}, where [1 - OLC, 2 - Auxiliary Structure, 3 - Byte-Reordering]. Default is ${BOLD}1${NORM}."
   echo "${REV}-b${NORM}  --Sets the value for bulk load limit ${BOLD}b${NORM}. Default is ${BOLD}1000000000${NORM}."
   echo "${REV}-n${NORM}  --Sets the value for number of operations per thread ${BOLD}n${NORM}. Default is ${BOLD}1000000000${NORM}."
   echo "${REV}-x${NORM}  --Sets the value for number of operations to report time for ${BOLD}n${NORM}. Default is ${BOLD}100000${NORM}."
