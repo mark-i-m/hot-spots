@@ -38,6 +38,7 @@ $(OUTDIR)/bmk_%: $(BMKDIR)/%.cc $(BTREEHS) $(BMKHS)
 
 clean:
 	rm -rf $(OUTDIR)
+	rm -f *.dvi *.log *.aux *.bbl *.blg *.ent *.out *.pdf
 
 #####
 # Some convenience targets for running benchmark and tests
@@ -66,3 +67,10 @@ bmk.all: $(BMKRUNTARGETS)
 
 %.bmk: $(OUTDIR)/bmk_%
 	@true
+
+# report PDF
+report.pdf: report.tex references.bib
+	pdflatex report.tex
+	bibtex report.aux
+	pdflatex report.tex
+	pdflatex report.tex

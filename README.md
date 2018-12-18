@@ -18,6 +18,8 @@ You need to have `g++` 7 or newer, along with GNU `make`.
 To run tests for B-tree implementations: `make tst.all`. To run a test `foo`:
 `make foo.tst`.
 
+To build the report: `make report.pdf`.
+
 # Running workloads
 
 All benchmarks were run using the `benchmarks/run_eval.sh` script in this repo.
@@ -61,4 +63,4 @@ The organization of this repository is as follows:
 - `figures/`: Figures produced from results with the `plot.py` script.
 - `results/`: Results produced from the `run_eval.sh` script.
 - `tests/`: Correctness tests for the B-trees.
-- `report.pdf`: Our report.
+- `report.tex`, `references.bib`: Our report.
