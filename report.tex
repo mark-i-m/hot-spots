@@ -47,14 +47,17 @@ sequential attribute, then all threads will contend on the same rightmost leaf
 node of the B-tree index.  We call such a leaf node with contention, a hot
 spot.
 
-For example, suppose that the following B-Tree represents an index on a Sales
+For example, suppose that the B-Tree in Figure \ref{ex} represents an index on a Sales
 table of a database, which is keyed by an auto-incremented order ID. Note that
 insertions for orders 19, 20, and 21 will all lock the same page. Additionally,
 in order to split the rightmost leaf, we will need to lock the entire path up
 to the root of the B-Tree. The contention on rightmost leaf, the hot-spot, is
 what we aim to solve in this work.
 
-TODO: image
+\begin{figure}[ht]
+\includegraphics[width=\columnwidth]{figures/btree_contention_example.png}
+\caption{Figure: Sample B-tree\label{ex}}
+\end{figure}
 
 To mitigate contention on hot spots, we propose a modification to B-trees with
 Optimistic Lock Coupling (OLC) \cite{art}: maintaining an auxiliary structure to keep
