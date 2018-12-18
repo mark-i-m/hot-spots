@@ -55,7 +55,10 @@ vector<bool> tready;
 // for locking
 std::mutex m;
 
+// function to return incremented counter : it maintains last entry in the tree
 unsigned long long int get_counter() { return ++counter; }
+
+// function to return incremented cpu id to have each thread set on a different cpu
 int get_cpu() { return ++cpu; }
 
 //function to print average time in std::out (console)
@@ -80,6 +83,7 @@ int get_cpu() { return ++cpu; }
 }
 */
 
+// function to read random keys from the tree and measure the times
 void reader_child(int thread_id, unsigned long long int ops,
                   common::BTreeBase<unsigned long long int, unsigned long long int> *btree, unsigned long long int X, string path) {
     // set cpu
@@ -137,6 +141,7 @@ void reader_child(int thread_id, unsigned long long int ops,
     return;
 }
 
+// function to insert sequential keys in the tree and measure the times 
 void writer_child(int thread_id, unsigned long long int ops,
                   common::BTreeBase<unsigned long long int, unsigned long long int> *btree, unsigned long long int X, string path) {
     // set cpu
@@ -203,6 +208,7 @@ bool check_all_true(vector<bool> &arr) {
     return true;
 }
 
+// function to create read and write threads
 void test(int R, int W, unsigned long long int N, common::BTreeBase<unsigned long long int, unsigned long long int> *btree,
           unsigned long long int X, string path) {
  
@@ -247,6 +253,7 @@ void test(int R, int W, unsigned long long int N, common::BTreeBase<unsigned lon
     return;
 }
 
+// main handles input values, initializes a tree and counter, calls test function
 int main(int argc, char** argv) {
     set_cpu(0);
     // bulk_load_limit initializes the btree with some pre-existing values before evaluation starts
