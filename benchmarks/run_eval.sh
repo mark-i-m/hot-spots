@@ -35,7 +35,7 @@ REV=`tput smso`
 # Help function
 function HELP {
   echo -e \\n"Help documentation for ${BOLD}${SCRIPT}.${NORM}"\\n
-  echo -e "${REV}Basic usage:${NORM} ${BOLD}$SCRIPT file.ext${NORM}"\\n
+  echo -e "${REV}Basic usage:${NORM} ${BOLD}$SCRIPT [-i R1] [-j R2] [-c W1] [-d W2] [-t T] [-b B] [-n N] [-x X]${NORM}"\\n
   echo "Command line switches are optional. The following switches are recognized."
   echo "${REV}-i${NORM}  --Sets the start value for the number of read threads ${BOLD}i${NORM}. Default is ${BOLD}1${NORM}."
   echo "${REV}-j${NORM}  --Sets the end value for the number of read threads ${BOLD}j${NORM}. Default is ${BOLD}1${NORM}."
@@ -46,7 +46,7 @@ function HELP {
   echo "${REV}-n${NORM}  --Sets the value for number of operations per thread ${BOLD}n${NORM}. Default is ${BOLD}1000000000${NORM}."
   echo "${REV}-x${NORM}  --Sets the value for number of operations to report time for ${BOLD}n${NORM}. Default is ${BOLD}100000${NORM}."
   echo -e "${REV}-h${NORM}  --Displays this help message. No further functions are performed."\\n
-  echo -e "Example: ${BOLD}$SCRIPT -r1 10 -r2 20 -w1 10 -w2 20 -t hybrid${NORM}"\\n
+  echo -e "Example: ${BOLD}$SCRIPT -r1 10 -r2 20 -w1 10 -w2 20 -t 3${NORM}"\\n
   exit 1
 }
 
